@@ -1,0 +1,15 @@
+# Scratch / local
+*.tmp
+*.bak
+.DS_Store
+scratch/
+sandbox/
+
+# Backups created by mc-install/mc-retrofit when replacing existing files
+*.mc-bak
+
+# Node / Python artifacts (in case tooling tests pull anything)
+node_modules/
+__pycache__/
+*.pyc
+.venv/

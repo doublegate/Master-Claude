@@ -1,0 +1,28 @@
+# 40 — Docs-as-Spec, ADRs, CHANGELOG, ROADMAP
+
+- Treat subsystem docs as the spec, not a history log.
+- Update the matching `docs/<subsystem>.md` in the SAME change as any behavior change.
+- Reject a behavior diff whose spec is left untouched; enforce via a contribution gate.
+- When an executable oracle (test, golden output, conformance suite) and the prose disagree, fix the prose.
+- Designate exactly one status file as the single source of truth for current state.
+- Let narrative summaries lag, but point them at the canonical status file.
+- Write ADRs in Michael Nygard format: Context, Decision, Consequences.
+- Capture rationale and cost in ADRs, not changelog-style history.
+- Store ADRs numbered under `docs/adr/`.
+- Never rewrite a superseded ADR in place; add a new ADR that supersedes and cross-links it.
+- Keep one CHANGELOG.md as the single source of truth for user-visible change.
+- Maintain an `[Unreleased]` section; add the entry in the same PR as the user-facing change.
+- Enforce the CHANGELOG entry with a quality gate; rename `[Unreleased]` to the version at release.
+- Keep deep engineering/lineage narrative out of the CHANGELOG.
+- Keep README to: platform/support matrix, quick-start, one-paragraph architecture sketch.
+- Make README point to status and subsystem docs instead of restating them; refresh it as a release task.
+- Use ROADMAP.md as the planning entry point and the place stable ticket IDs are minted.
+- Assign every roadmap item a stable, citable ID and reference it in branches/commits/PRs.
+- Treat the reference/research corpus as immutable.
+- Land corrections to immutable references as new dated supplemental files, never in-place rewrites.
+- Mark immutable/vendored trees exempt from linters and reformatters.
+- Build docs in CI with warnings-as-errors so examples and intra-doc links stay valid.
+- Avoid intra-doc links to feature-gated deps in default doc builds; use plain code spans.
+- Pin the markdown linter version in the gate; a newer local binary may report ungated rules.
+- Disable lint rules that fight legitimate long technical tables or HTML banners by design.
+- Migrate stable recent decisions from volatile local notes into a durable historical-decisions table.

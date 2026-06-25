@@ -1,0 +1,25 @@
+# 70 — Release Ceremony
+
+- Gate every cut behind a deterministic pre-release checklist; fail closed on hard failures.
+- Require before tagging: clean tree, tests green, linter clean, docs build, CHANGELOG updated, no advisories, CI green, versions consistent.
+- Emit a PASS/FAIL/WARN tally and a written report from the pre-release gate.
+- Detect an existing tag/release before creating one; never double-ship a version.
+- Treat a published version as immutable; bump or explicitly delete a stale tag instead of overwriting.
+- Make the annotated tag a standalone artifact: executive summary plus technical depth.
+- Include in the tag: features, metrics deltas, technical details, files changed, testing evidence, value.
+- Extend release notes beyond the tag with install steps, platform matrix, asset links, known issues, upgrade notes.
+- Follow SemVer: MAJOR breaking, MINOR additive, PATCH bugfix/polish.
+- Keep feature work additive and off-by-default so non-major releases stay compatible.
+- Reserve breaking save-state/format/API changes for one clearly-announced major release flagged in advance.
+- Maintain an explicit per-release packaging matrix: multi-arch images, OS packages, per-triple binaries, man pages, checksums.
+- Build all artifacts from a release workflow so the set is reproducible, not hand-assembled.
+- Trigger release builds on the version-tag push; redeploy docs/demo sites on the same tag.
+- Expose a manual `workflow_dispatch` trigger; keep release/docs builds idempotent.
+- Stage the rollout: ship beta/sideload/TestFlight channels before production/GA.
+- Document kill/rollback criteria in writing before a staged rollout begins.
+- Defer the production launch flags until the stabilizing release; flip them all at the final launch version.
+- Fix a written, ordered release process and follow it every time.
+- Typical order: assemble notes from sprint/phase docs, review commit range, run gate, tag, release with assets, verify, push.
+- Derive the version from the build manifest; assert it matches README and any embedded version checks before tagging.
+- Cross-compile platform binaries via target triples; use vendored TLS for static musl builds.
+- Attach checksummed assets; pin toolchains in the release pipeline.
