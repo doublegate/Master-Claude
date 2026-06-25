@@ -72,5 +72,5 @@ checkn "dry-run wrote nothing" test -f "$R/AGENTS.md"
 # --- 8. self-guard refuses a real apply on the repo itself ----------------
 checkn "self-guard refuses repo" "$BIN/mc-apply.sh" "$REPO"
 
-printf '\n%s\n' "$([ "$FAILS" -eq 0 ] && echo 'ALL PASS' || echo "$FAILS FAILED")"
+if [ "$FAILS" -eq 0 ]; then printf '\nALL PASS\n'; else printf '\n%d FAILED\n' "$FAILS"; fi
 [ "$FAILS" -eq 0 ]

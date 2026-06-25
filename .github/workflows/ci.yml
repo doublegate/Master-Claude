@@ -12,7 +12,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Shell lint (shellcheck)
-        run: shellcheck bin/*.sh test/run.sh
+        # Fail on warning+ (errors/warnings); info/style notes are advisory and must not
+        # break the build across shellcheck version drift between dev machines and CI.
+        run: shellcheck --severity=warning bin/*.sh test/run.sh
 
       - name: Self-tests
         run: sh test/run.sh

@@ -15,7 +15,7 @@ REPO_ROOT=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 MEMCORE="$REPO_ROOT/memory-core"
 
 PROJECT="${1:-}"; SLUG="${2:-}"
-[ -n "$PROJECT" ] && [ -n "$SLUG" ] || die "usage: mc-promote.sh <project-dir> <fact-slug> [--date YYYY-MM-DD]"
+if [ -z "$PROJECT" ] || [ -z "$SLUG" ]; then die "usage: mc-promote.sh <project-dir> <fact-slug> [--date YYYY-MM-DD]"; fi
 shift 2 || true
 DATE=""
 while [ $# -gt 0 ]; do case "$1" in --date) DATE="${2:-}"; shift 2 ;; *) die "unknown flag: $1" ;; esac; done

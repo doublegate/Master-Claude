@@ -73,7 +73,7 @@ for p in $PROJECTS; do
   rel=${p#"$ROOT"/}
   if [ "$APPLY" -eq 1 ]; then
     # shellcheck disable=SC2086
-    out=$("$SCRIPT_DIR/mc-apply.sh" "$p" $PASS 2>&1) && rc=0 || rc=$?
+    if out=$("$SCRIPT_DIR/mc-apply.sh" "$p" $PASS 2>&1); then rc=0; else rc=$?; fi
     state=$(printf '%s\n' "$out" | sed -n 's/.*state=\([a-z]*\).*/\1/p' | head -1)
     next=$(printf '%s\n' "$out" | sed -n 's/^MC-NEXT: \(.*\)/\1/p' | head -1)
     doc=$(printf '%s\n' "$out" | sed -n 's/^mc-doctor: \(.*\)/\1/p' | tail -1)
