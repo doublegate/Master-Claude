@@ -1,0 +1,39 @@
+name: CodeQL
+
+# CodeQL security analysis. This repo has no compiled/interpreted source CodeQL supports
+# (it is shell + markdown), so the valuable target is the GitHub Actions workflows themselves
+# (`language: actions`, GA April 2025): script injection, missing permissions, unvalidated
+# inputs. Shell scripts are covered by shellcheck/actionlint in ci.yml + lint, not here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'   # weekly, Mondays 06:00 UTC
+
+permissions:
+  contents: read
+  security-events: write   # upload results to code scanning
+
+jobs:
+  analyze:
+    name: Analyze (actions)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

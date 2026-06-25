@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **CodeQL** workflow (`.github/workflows/codeql.yml`, `language: actions`) scanning the
+  GitHub Actions workflows for script injection, missing permissions, and unvalidated inputs.
+- **actionlint** workflow linting added to CI.
+- **Self-hosted PR reviewer** (`.github/workflows/claude-review.yml`): runs Claude in the
+  repo's own Actions runner. Inert until an `ANTHROPIC_API_KEY` secret is configured (stays
+  green when absent); gated at step level so it never blocks fork PRs.
+- **Dependabot** (`.github/dependabot.yml`) for the GitHub Actions ecosystem, keeping the
+  SHA/digest-pinned third-party actions current.
+
+### Security
+
+- `release.yml`: pass the `workflow_dispatch` tag input, event name, and resolved tag via
+  `env:` instead of interpolating `${{ ... }}` directly into shell `run:` blocks. This closes
+  the Actions script-injection vector (the prior charset validation ran *after* interpolation).
+
 ## [0.1.1] - 2026-06-25
 
 ### Fixed

@@ -23,16 +23,18 @@ jobs:
 
       - name: Resolve tag
         id: tag
+        # Untrusted/context values are passed via env (never interpolated into the script body)
+        # to avoid Actions script injection; the value is then strictly validated.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG_INPUT: ${{ github.event.inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.tag }}"
-            TAG="${TAG#refs/tags/}"   # tolerate a pasted refs/tags/ prefix
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="${TAG_INPUT#refs/tags/}"   # tolerate a pasted refs/tags/ prefix
           else
             TAG="${GITHUB_REF_NAME}"
           fi
-          # Reject anything outside a safe semver-tag charset. This also blocks CR/LF, which
-          # would otherwise let a user-controlled workflow_dispatch input inject extra lines
-          # into $GITHUB_OUTPUT (shell `case` globs match newlines).
+          # Reject anything outside a safe semver-tag charset (blocks CR/LF and shell metachars).
           case "$TAG" in
             *[!A-Za-z0-9.+_-]*) echo "::error::tag has characters outside [A-Za-z0-9.+_-]: '$TAG'"; exit 1 ;;
           esac
@@ -49,8 +51,9 @@ jobs:
           sh test/run.sh
 
       - name: Build distributable
+        env:
+          TAG: ${{ steps.tag.outputs.name }}
         run: |
-          TAG="${{ steps.tag.outputs.name }}"
           git archive --format=tar.gz --prefix="master-claude-${TAG}/" \
             -o "master-claude-${TAG}.tar.gz" "${TAG}"
           sha256sum "master-claude-${TAG}.tar.gz" > "master-claude-${TAG}.tar.gz.sha256"
@@ -59,8 +62,8 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.name }}
         run: |
-          TAG="${{ steps.tag.outputs.name }}"
           NOTES="docs/releases/${TAG}.md"
           # Use checked-in release notes when present; only auto-generate if they are empty.
           if [ -s "$NOTES" ]; then
