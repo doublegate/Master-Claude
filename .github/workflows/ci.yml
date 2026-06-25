@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell lint (shellcheck)
+        run: shellcheck bin/*.sh test/run.sh
+
+      - name: Self-tests
+        run: sh test/run.sh
+
+      - name: Curation guard (no instruction module over 200 lines)
+        run: |
+          over=$(find master-core memory-core docs/knowledge -name '*.md' \
+            -exec awk 'END{ if (NR > 200) print FILENAME" ("NR")" }' {} \;)
+          if [ -n "$over" ]; then
+            echo "Files exceeding the 200-line curation limit:"
+            echo "$over"
+            exit 1
+          fi
+          echo "OK: all instruction modules within the 200-line limit"

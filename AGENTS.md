@@ -38,11 +38,12 @@ and keep that knowledge in sync inside any project. See `README.md` and `docs/00
 
 ## Build / verify
 
-- Shell lint: `shellcheck bin/*.sh`
+- Shell lint: `shellcheck bin/*.sh test/run.sh`
+- Self-tests: `sh test/run.sh` (sandboxed: install/symlinks/idempotency/seed/trim/state/
+  retrofit-safety/self-guard). CI (`.github/workflows/ci.yml`) runs lint + tests + the
+  <200-line curation guard on every push.
 - Slash commands live in `commands/`; register with `bin/mc-commands.sh --global` so they
   resolve (Claude Code only scans `~/.claude/commands`, not this repo's `commands/`).
-- Tooling smoke test: run `bin/mc-install.sh` against a throwaway sandbox dir, confirm
-  `CLAUDE.md`/`GEMINI.md` resolve via `readlink` and the file is <200 lines.
 
 See `docs/architecture/distribution-model.md` for the install mechanism and the
 `--inline` vs `--import` modes.
