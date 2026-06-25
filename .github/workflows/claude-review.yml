@@ -1,0 +1,46 @@
+name: Claude Review
+
+# Self-hosted PR reviewer: runs Claude in this repo's own Actions runner (no third-party
+# review app). Inert until an ANTHROPIC_API_KEY repository secret is configured — the easiest
+# way is to run `/install-github-app` from Claude Code, or add the secret under
+# Settings -> Secrets and variables -> Actions. Without the key the job no-ops (stays green).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    # Fork PRs cannot access the secret; skip them. Same-repo PRs proceed.
+    if: github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - name: Skip when unconfigured
+        if: env.HAS_KEY != 'true'
+        run: echo "ANTHROPIC_API_KEY not set - skipping Claude review. Add the secret (or run /install-github-app) to enable."
+
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+        with:
+          fetch-depth: 0
+
+      - name: Claude review
+        if: env.HAS_KEY == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this pull request. Focus on correctness, security (especially GitHub Actions
+            script injection and shell quoting), and the project conventions in AGENTS.md:
+            POSIX sh with no heredocs, instruction modules under 200 lines, master-core and
+            memory-core kept project-agnostic, and dry-run-first for anything touching files
+            outside the repo. Leave concise inline review comments for concrete issues only; do
+            not nitpick style the linters already cover. If it looks good, say so briefly.
+          claude_args: "--max-turns 20"
