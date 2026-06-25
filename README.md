@@ -1,5 +1,10 @@
 # Master-Claude
 
+[![CI](https://github.com/doublegate/Master-Claude/actions/workflows/ci.yml/badge.svg)](https://github.com/doublegate/Master-Claude/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/doublegate/Master-Claude?sort=semver)](https://github.com/doublegate/Master-Claude/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![POSIX sh](https://img.shields.io/badge/shell-POSIX%20sh-89e051.svg)](https://pubs.opengroup.org/onlinepubs/9699919799/)
+
 **The single, curated, project-agnostic synthesis of everything AI agents have learned across
 `~/Code/` — plus the tooling to drop that knowledge into any project and keep it in sync.**
 
@@ -56,7 +61,8 @@ bin/mc-retrofit.sh --dry-run /path/to/project # preview a retrofit (never modifi
 | Distributable core | `master-core/` | Slim modules installed into projects (<200 lines each) |
 | Memory | `memory-core/` | Generalized cross-project facts (schema v2) |
 | Assets | `commands/`, `skills/`, `templates/` | Shared agent assets + starter stubs |
-| Tooling | `bin/` | install · sync · promote · retrofit · doctor |
+| Tooling | `bin/` | apply · apply-all · install · sync · doctor · promote · retrofit · commands |
+| Verification | `test/`, `.github/` | self-test harness + CI (lint, tests, curation guard) |
 | Plan | `to-dos/` | Phase-based execution roadmap |
 
 ## Design principles
@@ -71,3 +77,9 @@ bin/mc-retrofit.sh --dry-run /path/to/project # preview a retrofit (never modifi
   by default and changes nothing until you say so.
 
 Start with `docs/00-OVERVIEW.md`, then `docs/01-KNOWLEDGE-TAXONOMY.md`.
+
+## Contributing & license
+
+Conventions and local checks are in [`CONTRIBUTING.md`](CONTRIBUTING.md) (and the canonical
+[`AGENTS.md`](AGENTS.md)). Release history is in [`CHANGELOG.md`](CHANGELOG.md). Licensed under
+the [MIT License](LICENSE).

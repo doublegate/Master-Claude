@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify (lint + self-tests)
+        run: |
+          shellcheck --severity=warning bin/*.sh test/run.sh
+          sh test/run.sh
+
+      - name: Build distributable
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+          git archive --format=tar.gz --prefix="master-claude-${TAG}/" \
+            -o "master-claude-${TAG}.tar.gz" "${TAG}"
+          sha256sum "master-claude-${TAG}.tar.gz" > "master-claude-${TAG}.tar.gz.sha256"
+          ls -l master-claude-*.tar.gz*
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+          NOTES="docs/releases/${TAG}.md"
+          # Use checked-in release notes when present; only auto-generate if they are empty.
+          if [ -s "$NOTES" ]; then
+            gh release create "$TAG" master-claude-"${TAG}".tar.gz* \
+              --title "Master-Claude ${TAG}" --notes-file "$NOTES" --verify-tag
+          else
+            gh release create "$TAG" master-claude-"${TAG}".tar.gz* \
+              --title "Master-Claude ${TAG}" --generate-notes --verify-tag
+          fi
