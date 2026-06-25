@@ -5,6 +5,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read   # least-privilege; CI only needs to read the repo (CodeQL: actions/missing-workflow-permissions)
+
 jobs:
   verify:
     runs-on: ubuntu-latest
