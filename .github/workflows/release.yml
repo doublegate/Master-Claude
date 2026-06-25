@@ -25,10 +25,23 @@ jobs:
         id: tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "name=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+            TAG="${{ github.event.inputs.tag }}"
+            TAG="${TAG#refs/tags/}"   # tolerate a pasted refs/tags/ prefix
           else
-            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            TAG="${GITHUB_REF_NAME}"
           fi
+          # Reject anything outside a safe semver-tag charset. This also blocks CR/LF, which
+          # would otherwise let a user-controlled workflow_dispatch input inject extra lines
+          # into $GITHUB_OUTPUT (shell `case` globs match newlines).
+          case "$TAG" in
+            *[!A-Za-z0-9.+_-]*) echo "::error::tag has characters outside [A-Za-z0-9.+_-]: '$TAG'"; exit 1 ;;
+          esac
+          # Require the vMAJOR.* shape.
+          case "$TAG" in
+            v[0-9]*) ;;
+            *) echo "::error::tag must start with a version like v1.2.3 (got '$TAG')"; exit 1 ;;
+          esac
+          echo "name=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Verify (lint + self-tests)
         run: |

@@ -6,12 +6,18 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-### Added
+## [0.1.1] - 2026-06-25
 
-- Release packaging: `.github/workflows/release.yml` builds a `master-claude-<tag>.tar.gz`
-  distributable and publishes a GitHub Release on `v*` tags (uses checked-in
-  `docs/releases/<tag>.md` notes when present, falls back to auto-generated notes otherwise).
-- README badges (CI, release, license) and a contributing/license footer.
+### Fixed
+
+- `release.yml`: normalize the `workflow_dispatch` `tag` input — strip a pasted
+  `refs/tags/` prefix and validate the `v*` format — so manual releases don't fail on the
+  common GitHub UI paste pattern.
+
+### Changed
+
+- `CHANGELOG.md`: attribute the release-workflow and README-badge entries to `[0.1.0]`
+  (they shipped in the `v0.1.0` tag) instead of `[Unreleased]`.
 
 ## [0.1.0] - 2026-06-25
 
@@ -36,6 +42,11 @@ plus the tooling to install and sync it into any project.
 - **Templates**: project-block scaffold and a `CLAUDE.local.md` session-state template.
 - **Verification**: `test/run.sh` self-test harness (18 sandboxed assertions) and a GitHub
   Actions workflow running shellcheck, the self-tests, and a <200-line curation guard.
+- **Release packaging**: `.github/workflows/release.yml` builds a `master-claude-<tag>.tar.gz`
+  distributable (+ sha256) and publishes a GitHub Release on `v*` tags (uses checked-in
+  `docs/releases/<tag>.md` notes when present, falls back to auto-generated notes otherwise).
+- **README**: CI/release/license/POSIX badges and a contributing/license footer.
 
-[Unreleased]: https://github.com/doublegate/Master-Claude/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/doublegate/Master-Claude/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/doublegate/Master-Claude/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/doublegate/Master-Claude/releases/tag/v0.1.0
