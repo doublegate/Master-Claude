@@ -13,7 +13,9 @@ All notable changes to this project are documented here. The format is based on
 - **actionlint** workflow linting added to CI.
 - **Self-hosted PR reviewer** (`.github/workflows/claude-review.yml`): runs Claude in the
   repo's own Actions runner. Inert until an `ANTHROPIC_API_KEY` secret is configured (stays
-  green when absent).
+  green when absent); gated at step level so it never blocks fork PRs.
+- **Dependabot** (`.github/dependabot.yml`) for the GitHub Actions ecosystem, keeping the
+  SHA/digest-pinned third-party actions current.
 
 ### Security
 

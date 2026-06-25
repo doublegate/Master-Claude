@@ -16,9 +16,10 @@ permissions:
 
 jobs:
   review:
-    # Fork PRs cannot access the secret; skip them. Same-repo PRs proceed.
-    if: github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
+    # No job-level `if` (a skipped job would not satisfy branch protection if this is ever
+    # required). Gate at the step level instead: fork PRs and unconfigured repos lack the
+    # secret, so HAS_KEY is false and the real steps are skipped while the job still succeeds.
     env:
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
@@ -33,7 +34,8 @@ jobs:
 
       - name: Claude review
         if: env.HAS_KEY == 'true'
-        uses: anthropics/claude-code-action@v1
+        # Pinned to an immutable commit SHA for supply-chain safety (Dependabot tracks v1).
+        uses: anthropics/claude-code-action@521136812280ae7ef256e06045655b9da02793f0 # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
