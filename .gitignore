@@ -13,3 +13,18 @@ node_modules/
 __pycache__/
 *.pyc
 .venv/
+
+# Release build artifacts (produced by the release workflow / local packaging)
+master-claude-*.tar.gz
+dist/
+
+# Editor / OS noise
+.idea/
+.vscode/
+*.swp
+*~
+*.log
+.cache/
+
+# Personal, never shared
+CLAUDE.local.md

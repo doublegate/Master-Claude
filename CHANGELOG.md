@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Release packaging: `.github/workflows/release.yml` builds a `master-claude-<tag>.tar.gz`
+  distributable and publishes a GitHub Release on `v*` tags (uses checked-in
+  `docs/releases/<tag>.md` notes when present, falls back to auto-generated notes otherwise).
+- README badges (CI, release, license) and a contributing/license footer.
+
 ## [0.1.0] - 2026-06-25
 
 Initial release: the curated, project-agnostic synthesis of cross-project AI-agent knowledge,
@@ -28,4 +37,5 @@ plus the tooling to install and sync it into any project.
 - **Verification**: `test/run.sh` self-test harness (18 sandboxed assertions) and a GitHub
   Actions workflow running shellcheck, the self-tests, and a <200-line curation guard.
 
+[Unreleased]: https://github.com/doublegate/Master-Claude/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/doublegate/Master-Claude/releases/tag/v0.1.0
