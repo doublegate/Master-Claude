@@ -25,10 +25,16 @@ jobs:
         id: tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "name=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+            TAG="${{ github.event.inputs.tag }}"
+            TAG="${TAG#refs/tags/}"   # tolerate a pasted refs/tags/ prefix
           else
-            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            TAG="${GITHUB_REF_NAME}"
           fi
+          case "$TAG" in
+            v[0-9]*) ;;
+            *) echo "::error::tag must look like v1.2.3 (got '$TAG')"; exit 1 ;;
+          esac
+          echo "name=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Verify (lint + self-tests)
         run: |
