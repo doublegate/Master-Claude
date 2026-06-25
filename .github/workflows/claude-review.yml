@@ -27,7 +27,7 @@ jobs:
         if: env.HAS_KEY != 'true'
         run: echo "ANTHROPIC_API_KEY not set - skipping Claude review. Add the secret (or run /install-github-app) to enable."
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.HAS_KEY == 'true'
         with:
           fetch-depth: 0
