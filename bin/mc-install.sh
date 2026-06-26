@@ -11,6 +11,8 @@
 #   --inline  bake modules into AGENTS.md (full Claude/Codex/Gemini parity).
 #   --trim    when seeding a block from an existing file, HTML-comment lines that
 #             look like universal rules already in the core (lossless; review after).
+#   --modules <list>  comma-separated module number prefixes to include (e.g. 10,30,60);
+#             default = all. Slims --inline installs to only the relevant modules.
 #
 set -eu
 
@@ -35,6 +37,19 @@ body_filter() {
   fi
 }
 
+# Emit the module file paths to include, honoring the --modules filter (comma list of
+# leading number prefixes, e.g. "10,30,60"). Empty filter = all modules.
+core_modules() {
+  for m in "$CORE_SRC"/modules/*.md; do
+    [ -e "$m" ] || continue
+    if [ -n "$MODULES" ]; then
+      base=$(basename -- "$m"); num=${base%%-*}
+      case ",$MODULES," in *",$num,"*) ;; *) continue ;; esac
+    fi
+    printf '%s\n' "$m"
+  done
+}
+
 # --- resolve repo + core ---------------------------------------------------
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
@@ -46,6 +61,7 @@ LANG=""
 MODE="import"
 NAME=""
 TRIM=0
+MODULES=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -53,9 +69,10 @@ while [ $# -gt 0 ]; do
     --inline) MODE="inline"; shift ;;
     --import) MODE="import"; shift ;;
     --trim) TRIM=1; shift ;;
+    --modules) MODULES="${2:-}"; shift 2 ;;
     --core) CORE_SRC="${2:-}"; shift 2 ;;
     --name) NAME="${2:-}"; shift 2 ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     -*) die "unknown flag: $1" ;;
     *) PROJECT="$1"; shift ;;
   esac
@@ -83,6 +100,10 @@ if [ -z "$LANG" ]; then
   fi
 fi
 [ -f "$CORE_SRC/lang/$LANG.md" ] || die "no lang overlay: $LANG"
+
+CORE_VERSION=$(cat "$CORE_SRC/VERSION" 2>/dev/null || echo unknown)
+MOD_NOTE=""
+if [ -n "$MODULES" ]; then MOD_NOTE=" | modules=$MODULES"; fi
 
 AGENTS="$PROJECT/AGENTS.md"
 
@@ -146,19 +167,18 @@ done
 {
   printf '%s\n' "<!-- Managed by Master-Claude. Universal rules come from the imported/inlined core."
   printf '%s\n' "     Edit only inside the MC-PROJECT block; mc-sync overwrites everything else. -->"
+  printf '<!-- mc-core: %s | mode=%s | lang=%s%s -->\n' "$CORE_VERSION" "$MODE" "$LANG" "$MOD_NOTE"
   printf '# AGENTS.md — %s\n\n' "$NAME"
   if [ "$MODE" = import ]; then
     printf '@%s/AGENTS.base.md\n' "$CORE_LINK"
     printf '@%s/lang/%s.md\n' "$CORE_LINK" "$LANG"
-    for m in "$CORE_SRC"/modules/*.md; do
-      [ -e "$m" ] || continue
+    core_modules | while read -r m; do
       printf '@%s/modules/%s\n' "$CORE_LINK" "$(basename -- "$m")"
     done
   else
     cat "$CORE_SRC/AGENTS.base.md"; printf '\n'
     cat "$CORE_SRC/lang/$LANG.md"; printf '\n'
-    for m in "$CORE_SRC"/modules/*.md; do
-      [ -e "$m" ] || continue
+    core_modules | while read -r m; do
       printf '\n---\n\n'; cat "$m"
     done
   fi
