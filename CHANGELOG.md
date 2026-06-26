@@ -21,9 +21,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
-- Completeness-critic pass over `master-core/modules/`: consolidated cross-module duplication —
-  golden-vector + exactness-flag rules are now canonical to module 20 (module 90 references it),
-  and the "migrate stable decisions" rule to module 80 (removed the duplicate from module 40).
+- Completeness-critic pass over `master-core/modules/`: consolidated cross-module duplication.
+  Module 20's *Golden vectors* and *Exactness honesty* rules are now the canonical home (module 90
+  references them), and the "migrate stable decisions" rule moved to module 80 (removed the
+  duplicate from module 40).
 
 ### Security
 
