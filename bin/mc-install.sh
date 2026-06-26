@@ -69,7 +69,7 @@ while [ $# -gt 0 ]; do
     --inline) MODE="inline"; shift ;;
     --import) MODE="import"; shift ;;
     --trim) TRIM=1; shift ;;
-    --modules) MODULES="${2:-}"; shift 2 ;;
+    --modules) [ $# -gt 1 ] || die "--modules requires an argument"; MODULES="$2"; shift 2 ;;
     --core) CORE_SRC="${2:-}"; shift 2 ;;
     --name) NAME="${2:-}"; shift 2 ;;
     -h|--help) sed -n '2,16p' "$0"; exit 0 ;;

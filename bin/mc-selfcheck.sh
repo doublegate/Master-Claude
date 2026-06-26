@@ -28,9 +28,9 @@ if [ -f "$A" ]; then
   if [ "$n" -le 200 ]; then ok "AGENTS.md $n lines (<=200)"; else fail "AGENTS.md $n lines (>200)"; fi
 fi
 
-# 2. curation guard: every distributable module/doc <= 200 lines
+# 2. curation guard: every distributable module/doc <= 200 lines (single awk pass)
 over=$(find "$REPO/master-core" "$REPO/memory-core" "$REPO/docs/knowledge" -name '*.md' \
-  -exec awk 'END{ if (NR>200) print FILENAME" ("NR")" }' {} \; 2>/dev/null)
+  -exec awk 'FNR>200{n[FILENAME]=FNR} END{for(f in n) print f" ("n[f]")"}' {} + 2>/dev/null)
 if [ -z "$over" ]; then ok "all modules/docs <=200 lines"; else fail "over 200 lines:
 $over"; fi
 
@@ -47,7 +47,7 @@ for f in "$REPO"/memory-core/*.md; do
   [ -e "$f" ] || continue
   b=$(basename -- "$f"); [ "$b" = MEMORY.md ] && continue
   for key in 'name:' 'description:' 'type:'; do
-    grep -q "$key" "$f" || { fail "$b missing frontmatter '$key'"; mem_bad=$((mem_bad+1)); }
+    grep -q "^[[:space:]]*$key" "$f" || { fail "$b missing frontmatter '$key'"; mem_bad=$((mem_bad+1)); }
   done
 done
 [ "$mem_bad" -eq 0 ] && ok "memory-core frontmatter complete"
@@ -58,6 +58,11 @@ for d in "$REPO"/docs/knowledge/[0-9]*.md; do
   [ -e "$d" ] || continue
   b=$(basename -- "$d")
   [ -f "$REPO/master-core/modules/$b" ] || { fail "no master-core module for docs/knowledge/$b"; miss=$((miss+1)); }
+done
+for m in "$REPO"/master-core/modules/[0-9]*.md; do
+  [ -e "$m" ] || continue
+  b=$(basename -- "$m")
+  [ -f "$REPO/docs/knowledge/$b" ] || { fail "no knowledge doc for master-core/modules/$b"; miss=$((miss+1)); }
 done
 [ "$miss" -eq 0 ] && ok "knowledge docs and core modules aligned"
 

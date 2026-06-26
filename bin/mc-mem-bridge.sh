@@ -20,9 +20,12 @@ ONLY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --execute) EXECUTE=1; shift ;;
-    --codex-home) CODEX_HOME="${2:-}"; shift 2 ;;
-    --gemini-home) GEMINI_HOME="${2:-}"; shift 2 ;;
-    --only) ONLY="${2:-}"; shift 2 ;;
+    --codex-home) [ $# -gt 1 ] || { printf 'mc-mem-bridge: --codex-home requires an argument\n' >&2; exit 1; }
+                  CODEX_HOME="$2"; shift 2 ;;
+    --gemini-home) [ $# -gt 1 ] || { printf 'mc-mem-bridge: --gemini-home requires an argument\n' >&2; exit 1; }
+                   GEMINI_HOME="$2"; shift 2 ;;
+    --only) [ $# -gt 1 ] || { printf 'mc-mem-bridge: --only requires an argument\n' >&2; exit 1; }
+            ONLY="$2"; shift 2 ;;
     -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
     *) printf 'mc-mem-bridge: unknown arg: %s\n' "$1" >&2; exit 1 ;;
   esac
@@ -40,7 +43,7 @@ DIGEST=$(mktemp); trap 'rm -f "$DIGEST"' EXIT
   for f in "$MEMCORE"/*.md; do
     [ -e "$f" ] || continue
     b=$(basename -- "$f"); [ "$b" = MEMORY.md ] && continue
-    name=$(sed -n 's/^name:[[:space:]]*//p' "$f" | head -1)
+    name=$(sed -n 's/^name:[[:space:]]*//p' "$f" | head -n 1)
     [ -n "$name" ] || name=$(basename -- "$f" .md)
     printf '## %s\n\n' "$name"
     strip_fm "$f" | sed '/^[[:space:]]*$/{N;/^[[:space:]]*\n[[:space:]]*$/D}'
@@ -48,7 +51,12 @@ DIGEST=$(mktemp); trap 'rm -f "$DIGEST"' EXIT
   done
 } > "$DIGEST"
 
-facts=$(find "$MEMCORE" -maxdepth 1 -name '*.md' ! -name MEMORY.md | wc -l | tr -d ' ')
+facts=0
+for f in "$MEMCORE"/*.md; do
+  [ -e "$f" ] || continue
+  [ "${f##*/}" = MEMORY.md ] && continue
+  facts=$((facts+1))
+done
 lines=$(wc -l < "$DIGEST" | tr -d ' ')
 
 mode="DRY-RUN (no files written; pass --execute)"

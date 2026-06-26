@@ -16,7 +16,8 @@ SKIP="Archive Backups Dev_Test docs HPC_User_Forum metasploitable3-workspace Res
 while [ $# -gt 0 ]; do
   case "$1" in
     --all) SHOW_ALL=1; shift ;;
-    --exclude) SKIP="$SKIP ${2:-}"; shift 2 ;;
+    --exclude) [ $# -gt 1 ] || { printf 'mc-doctor-all: --exclude requires an argument\n' >&2; exit 1; }
+               SKIP="$SKIP $2"; shift 2 ;;
     -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
     -*) printf 'mc-doctor-all: unknown flag: %s\n' "$1" >&2; exit 1 ;;
     *) ROOT="$1"; shift ;;
@@ -55,12 +56,17 @@ printf '  %-46s %s\n' "PROJECT" "RESULT"
 printf '  %-46s %s\n' "-------" "------"
 
 n_managed=0; n_fail=0; n_warn=0; n_unmanaged=0
-for p in $(list_projects | sort); do
+# Use a temp file (not `for p in $(...)`) so paths with spaces survive and the counters,
+# which are mutated in the loop, are not lost to a pipeline subshell.
+PLIST=$(mktemp); trap 'rm -f "$PLIST"' EXIT
+list_projects | sort > "$PLIST"
+while IFS= read -r p; do
+  [ -n "$p" ] || continue
   rel=${p#"$ROOT"/}
   if managed "$p"; then
     n_managed=$((n_managed+1))
     out=$("$SCRIPT_DIR/mc-doctor.sh" "$p" 2>&1) || true
-    summary=$(printf '%s\n' "$out" | sed -n 's/^mc-doctor: \([0-9].*\)/\1/p' | tail -1)
+    summary=$(printf '%s\n' "$out" | sed -n 's/^mc-doctor: \([0-9].*\)/\1/p' | tail -n 1)
     printf '  %-46s %s\n' "$rel" "$summary"
     case "$summary" in *"0 fail"*) : ;; *) n_fail=$((n_fail+1)) ;; esac
     case "$summary" in *" 0 warn"*) : ;; *) n_warn=$((n_warn+1)) ;; esac
@@ -68,7 +74,7 @@ for p in $(list_projects | sort); do
     n_unmanaged=$((n_unmanaged+1))
     printf '  %-46s %s\n' "$rel" "(not managed)"
   fi
-done
+done < "$PLIST"
 
 UNMANAGED_NOTE=""
 if [ "$SHOW_ALL" -eq 1 ]; then UNMANAGED_NOTE=", $n_unmanaged unmanaged"; fi

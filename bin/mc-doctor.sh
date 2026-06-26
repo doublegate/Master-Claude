@@ -52,7 +52,7 @@ else warn "$CORE_LINK missing (ok for inline mode)"; fi
 
 # 3b. core version drift
 if [ -f "$AGENTS" ]; then
-  INST_VER=$(sed -n 's/.*mc-core: \([^ |]*\).*/\1/p' "$AGENTS" 2>/dev/null | head -1)
+  INST_VER=$(sed -n 's/.*mc-core: \([^ |]*\).*/\1/p' "$AGENTS" 2>/dev/null | head -n 1)
   if [ -n "$INST_VER" ] && [ -f "$CORE_LINK/VERSION" ]; then
     CUR_VER=$(cat "$CORE_LINK/VERSION")
     if [ "$INST_VER" = "$CUR_VER" ]; then ok "core version $INST_VER (current)"

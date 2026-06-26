@@ -15,8 +15,10 @@ MINP=2
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --min-projects) MINP="${2:-2}"; shift 2 ;;
-    --projects-root) ROOT="${2:-}"; shift 2 ;;
+    --min-projects) [ $# -gt 1 ] || { printf 'mc-mem-scan: --min-projects requires an argument\n' >&2; exit 1; }
+                    MINP="$2"; shift 2 ;;
+    --projects-root) [ $# -gt 1 ] || { printf 'mc-mem-scan: --projects-root requires an argument\n' >&2; exit 1; }
+                     ROOT="$2"; shift 2 ;;
     -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
     *) printf 'mc-mem-scan: unknown arg: %s\n' "$1" >&2; exit 1 ;;
   esac
@@ -37,7 +39,7 @@ for d in "$ROOT"/*/memory; do
   for f in "$d"/*.md; do
     [ -e "$f" ] || continue
     b=$(basename -- "$f" .md); [ "$b" = MEMORY ] && continue
-    scope=$(sed -n 's/^[[:space:]]*scope:[[:space:]]*//p' "$f" | head -1)
+    scope=$(sed -n 's/^[[:space:]]*scope:[[:space:]]*//p' "$f" | head -n 1)
     printf '%s\t%s\t%s\n' "$b" "$proj" "${scope:-}" >> "$TMPF"
   done
 done

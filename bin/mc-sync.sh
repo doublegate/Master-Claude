@@ -29,7 +29,7 @@ else LANG=generic
 fi
 
 # report core version delta (read the stamp before re-installing overwrites it)
-OLD_VER=$(sed -n 's/.*mc-core: \([^ |]*\).*/\1/p' "$AGENTS" | head -1)
+OLD_VER=$(sed -n 's/.*mc-core: \([^ |]*\).*/\1/p' "$AGENTS" | head -n 1)
 NEW_VER=$(cat "$SCRIPT_DIR/../master-core/VERSION" 2>/dev/null || echo unknown)
 if [ -n "$OLD_VER" ] && [ "$OLD_VER" != "$NEW_VER" ]; then
   printf 'mc-sync: core %s -> %s\n' "$OLD_VER" "$NEW_VER"
