@@ -24,6 +24,9 @@ All notable changes to this project are documented here. The format is based on
 - `release.yml`: pass the `workflow_dispatch` tag input, event name, and resolved tag via
   `env:` instead of interpolating `${{ ... }}` directly into shell `run:` blocks. This closes
   the Actions script-injection vector (the prior charset validation ran *after* interpolation).
+- Pin the installed Claude workflows (`claude.yml`, `claude-code-review.yml`) to match repo
+  policy: `anthropics/claude-code-action` to an immutable commit SHA and `actions/checkout`
+  aligned to `@v7`.
 
 ## [0.1.1] - 2026-06-25
 
