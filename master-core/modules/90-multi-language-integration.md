@@ -14,7 +14,7 @@ Project-agnostic rules for polyglot systems (FFI, shared contracts, cross-langua
 - Wrap vendored native libraries behind a single explicit shim layer.
 
 ## Cross-language parity
-- Pin duplicated logic (same algorithm in two languages) to one shared golden-vector set and assert a parity test that both implementations match it.
+- Pin duplicated logic (same algorithm in two languages) to one shared golden-vector set and assert via a parity test that both implementations match it.
 - Golden-vector lifecycle and the exactness-flag discipline are canonical in module 20 — apply them here; do not restate per language.
 
 ## Type-safe boundaries
