@@ -25,4 +25,3 @@
 - Avoid intra-doc links to feature-gated deps in default doc builds; use plain code spans.
 - Pin the markdown linter version in the gate; a newer local binary may report ungated rules.
 - Disable lint rules that fight legitimate long technical tables or HTML banners by design.
-- Migrate stable recent decisions from volatile local notes into a durable historical-decisions table.

@@ -19,6 +19,13 @@ All notable changes to this project are documented here. The format is based on
 - **Dependabot** (`.github/dependabot.yml`) for the GitHub Actions ecosystem, keeping the
   SHA/digest-pinned third-party actions current.
 
+### Changed
+
+- Completeness-critic pass over `master-core/modules/`: consolidated cross-module duplication.
+  Module 20's *Golden vectors* and *Exactness honesty* rules are now the canonical home (module 90
+  references them), and the "migrate stable decisions" rule moved to module 80 (removed the
+  duplicate from module 40).
+
 ### Security
 
 - `release.yml`: pass the `workflow_dispatch` tag input, event name, and resolved tag via

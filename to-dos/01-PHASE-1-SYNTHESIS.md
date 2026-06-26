@@ -10,8 +10,11 @@ Mine the corpus, write curated docs + distributable modules. **Status: COMPLETE.
 - [x] `templates/project-block.md` + `templates/CLAUDE.local.md`.
 
 ## Carryover / refinement (optional)
-- [ ] Completeness-critic pass: re-read all 10 modules together; remove any cross-module
-      duplication (e.g. profile-first appears in 30 and 50 — keep one canonical statement).
+- [x] Completeness-critic pass: re-read all 10 modules together; remove cross-module
+      duplication. Findings: profile-first is already canonical to module 30 only (the original
+      30/50 example was stale). Made module 20's *Golden vectors* and *Exactness honesty* rules
+      the canonical home (module 90 now references them), and moved the migrate-stable-decisions
+      line into module 80 (removing the duplicate from module 40).
 - [ ] Decide how aggressively to strip illustrative examples vs keep them (currently kept short).
 - [ ] Promote any additional universal facts discovered later via `/mem-promote`.
 
