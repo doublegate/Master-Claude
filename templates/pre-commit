@@ -1,0 +1,20 @@
+#!/bin/sh
+# Master-Claude pre-commit hook (template).
+# Install into a project that has the shared core:  cp this to .git/hooks/pre-commit && chmod +x
+# It runs mc-doctor on the project and blocks the commit on any FAIL (broken symlinks, missing
+# canonical AGENTS.md, oversized import-mode file, core drift). Warnings do not block.
+#
+# Point MC_BIN at your Master-Claude bin/ (or rely on it being on PATH).
+set -eu
+
+MC_BIN="${MC_BIN:-$HOME/Code/Master-Claude/bin}"
+DOCTOR="$MC_BIN/mc-doctor.sh"
+
+[ -x "$DOCTOR" ] || { printf 'pre-commit: mc-doctor not found at %s (set MC_BIN); skipping.\n' "$DOCTOR"; exit 0; }
+
+if "$DOCTOR" "$(git rev-parse --show-toplevel)"; then
+  exit 0
+else
+  printf 'pre-commit: mc-doctor reported a failure — fix it or commit with --no-verify.\n' >&2
+  exit 1
+fi

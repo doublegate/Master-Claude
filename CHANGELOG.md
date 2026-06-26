@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **Versioned core**: `master-core/VERSION`; `mc-install` stamps `<!-- mc-core: … -->` into the
+  generated `AGENTS.md`; `mc-sync` reports the version delta and `mc-doctor` flags drift.
+- **`mc-install --modules <list>`**: install only selected modules (e.g. `--modules 10,30,60`)
+  to slim size-sensitive `--inline` projects.
+- **`/mem-synthesize`** + `bin/mc-mem-scan.sh`: surface cross-project memory-promotion candidates
+  (same fact in ≥N projects, or `scope: universal`) not yet in `memory-core/`.
+- **`bin/mc-doctor-all.sh`**: audit every managed project under a workspace root in one command.
+- **`bin/mc-selfcheck.sh`**: validate this repo's own invariants (symlinks, sizes, VERSION,
+  memory frontmatter, doc/module alignment); wired into CI as the self-host gate.
+- **`bin/mc-mem-bridge.sh`**: build a digest of `memory-core/` into the Codex/Gemini homes so
+  all three agents can share the curated facts (dry-run by default).
+- **Pre-commit hook template** (`templates/pre-commit`) running `mc-doctor` before commit.
 - **CodeQL** workflow (`.github/workflows/codeql.yml`, `language: actions`) scanning the
   GitHub Actions workflows for script injection, missing permissions, and unvalidated inputs.
 - **actionlint** workflow linting added to CI.

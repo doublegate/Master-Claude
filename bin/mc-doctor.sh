@@ -50,6 +50,17 @@ if [ -e "$CORE_LINK" ]; then ok "shared core present at $CORE_LINK"
 elif [ "${MODE:-none}" = import ]; then fail "import mode but $CORE_LINK missing (broken @import)"
 else warn "$CORE_LINK missing (ok for inline mode)"; fi
 
+# 3b. core version drift
+if [ -f "$AGENTS" ]; then
+  INST_VER=$(sed -n 's/.*mc-core: \([^ |]*\).*/\1/p' "$AGENTS" 2>/dev/null | head -n 1)
+  if [ -n "$INST_VER" ] && [ -f "$CORE_LINK/VERSION" ]; then
+    CUR_VER=$(cat "$CORE_LINK/VERSION")
+    if [ "$INST_VER" = "$CUR_VER" ]; then ok "core version $INST_VER (current)"
+    else warn "core version $INST_VER installed, $CUR_VER available — run mc-sync"; fi
+  elif [ -n "$INST_VER" ]; then ok "core version $INST_VER (current unknown)"
+  elif [ "${MODE:-none}" != none ]; then warn "no mc-core version stamp (re-install to add)"; fi
+fi
+
 # 4. tri-agent parity gap
 if [ "${MODE:-none}" = import ]; then
   if [ -d "$PROJECT/.codex" ] || [ -d "$PROJECT/.gemini" ]; then

@@ -72,5 +72,27 @@ checkn "dry-run wrote nothing" test -f "$R/AGENTS.md"
 # --- 8. self-guard refuses a real apply on the repo itself ----------------
 checkn "self-guard refuses repo" "$BIN/mc-apply.sh" "$REPO"
 
+# --- 9. --modules filters the inline bake -------------------------------------
+M=$(mkrust modules)
+"$BIN/mc-install.sh" "$M" --inline --modules 10,30 >/dev/null
+check  "modules: 10 included" grep -q '^# 10 —' "$M/AGENTS.md"
+check  "modules: 30 included" grep -q '^# 30 —' "$M/AGENTS.md"
+checkn "modules: 20 excluded" grep -q '^# Module 20 —' "$M/AGENTS.md"
+check  "modules: stamp records selection" grep -q 'modules=10,30' "$M/AGENTS.md"
+
+# --- 10. version stamp present + doctor reports it ----------------------------
+check "version stamp present" grep -q 'mc-core:' "$M/AGENTS.md"
+if "$BIN/mc-doctor.sh" "$M" 2>&1 | grep -q 'core version'; then ok "doctor reports core version"; else no "doctor version"; fi
+
+# --- 11. repo self-check passes ----------------------------------------------
+check "mc-selfcheck passes on the repo" "$BIN/mc-selfcheck.sh"
+
+# --- 12. mem-bridge dry-run builds a digest and writes nothing ----------------
+BH="$SBROOT/codexhome"
+"$BIN/mc-mem-bridge.sh" --only codex --codex-home "$BH" >/dev/null 2>&1
+checkn "mem-bridge dry-run wrote nothing" test -f "$BH/master-memory.md"
+"$BIN/mc-mem-bridge.sh" --only codex --codex-home "$BH" --execute >/dev/null 2>&1 || true
+check "mem-bridge --execute writes digest" test -f "$BH/master-memory.md"
+
 if [ "$FAILS" -eq 0 ]; then printf '\nALL PASS\n'; else printf '\n%d FAILED\n' "$FAILS"; fi
 [ "$FAILS" -eq 0 ]

@@ -87,11 +87,16 @@ trades size for tri-agent parity. `mc-doctor` warns if an `--import` project als
 | `/mc-setup-all [root]` | Workspace-wide: sweep every project, apply, de-dup the seeded ones |
 | `mc-apply-all.sh [root] [--apply] [--exclude n]` | Shell sweep over all projects (dry-run default) |
 | `mc-apply.sh <dir> [--inline\|--import] [--no-trim] [--dry-run]` | Smart deterministic orchestrator (state detect → right action → doctor) |
-| `mc-install.sh <dir> [--lang x] [--inline\|--import] [--trim]` | Low-level: first-time setup / seed an existing file |
-| `mc-sync.sh <dir>` | Pull updated core (preserves project block) |
-| `mc-doctor.sh <dir>` | Audit: file size, symlink integrity, drift, parity gaps |
+| `mc-install.sh <dir> [--lang x] [--inline\|--import] [--trim] [--modules <list>]` | Low-level: first-time setup / seed an existing file / subset of modules |
+| `mc-sync.sh <dir>` | Pull updated core (preserves project block); reports the core version delta |
+| `mc-doctor.sh <dir>` | Audit: file size, symlink integrity, version drift, parity gaps |
+| `mc-doctor-all.sh [root]` | Audit every managed project under a workspace root |
+| `mc-selfcheck.sh` | Validate this repo's own invariants (CI self-host gate) |
 | `mc-promote.sh <dir> <slug> --date <d>` | Lift a project lesson into `memory-core/` |
+| `/mem-synthesize` · `mc-mem-scan.sh` | Surface cross-project memory-promotion candidates |
+| `mc-mem-bridge.sh [--execute]` | Digest `memory-core/` into the Codex/Gemini homes |
 | `mc-retrofit.sh --dry-run <dir>` | Show what a migration would change (no writes) |
+| `mc-commands.sh [--global]` | Register the slash commands into `~/.claude/commands` |
 
 ### State detection (how `mc-apply` / `/mc-setup` decide)
 

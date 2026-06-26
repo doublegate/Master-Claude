@@ -74,16 +74,16 @@ for p in $PROJECTS; do
   if [ "$APPLY" -eq 1 ]; then
     # shellcheck disable=SC2086
     if out=$("$SCRIPT_DIR/mc-apply.sh" "$p" $PASS 2>&1); then rc=0; else rc=$?; fi
-    state=$(printf '%s\n' "$out" | sed -n 's/.*state=\([a-z]*\).*/\1/p' | head -1)
-    next=$(printf '%s\n' "$out" | sed -n 's/^MC-NEXT: \(.*\)/\1/p' | head -1)
-    doc=$(printf '%s\n' "$out" | sed -n 's/^mc-doctor: \(.*\)/\1/p' | tail -1)
+    state=$(printf '%s\n' "$out" | sed -n 's/.*state=\([a-z]*\).*/\1/p' | head -n 1)
+    next=$(printf '%s\n' "$out" | sed -n 's/^MC-NEXT: \(.*\)/\1/p' | head -n 1)
+    doc=$(printf '%s\n' "$out" | sed -n 's/^mc-doctor: \(.*\)/\1/p' | tail -n 1)
     [ "$rc" -ne 0 ] && { doc="ERR ${doc:-}"; c_fail=$((c_fail+1)); }
     [ "$next" = curate ] && CURATE_LIST="$CURATE_LIST $p"
     plan="${next:-?}"
   else
     # shellcheck disable=SC2086
     out=$("$SCRIPT_DIR/mc-apply.sh" "$p" --dry-run $PASS 2>&1) || true
-    state=$(printf '%s\n' "$out" | sed -n 's/.*state=\([a-z]*\).*/\1/p' | head -1)
+    state=$(printf '%s\n' "$out" | sed -n 's/.*state=\([a-z]*\).*/\1/p' | head -n 1)
     case "$state" in
       new) plan="install-blank" ;;
       existing) plan="seed+trim" ;;
