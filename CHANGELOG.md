@@ -11,9 +11,10 @@ All notable changes to this project are documented here. The format is based on
 - **CodeQL** workflow (`.github/workflows/codeql.yml`, `language: actions`) scanning the
   GitHub Actions workflows for script injection, missing permissions, and unvalidated inputs.
 - **actionlint** workflow linting added to CI.
-- **Self-hosted PR reviewer** (`.github/workflows/claude-review.yml`): runs Claude in the
-  repo's own Actions runner. Inert until an `ANTHROPIC_API_KEY` secret is configured (stays
-  green when absent); gated at step level so it never blocks fork PRs.
+- **Claude PR reviewer**: the official Anthropic GitHub workflows (`claude-code-review.yml`
+  for automatic PR review + `claude.yml` for `@claude` mentions), installed via
+  `/install-github-app` and wired to the `CLAUDE_CODE_OAUTH_TOKEN` secret. (Replaces an earlier
+  custom `claude-review.yml` stub, which was removed as redundant.)
 - **Dependabot** (`.github/dependabot.yml`) for the GitHub Actions ecosystem, keeping the
   SHA/digest-pinned third-party actions current.
 
