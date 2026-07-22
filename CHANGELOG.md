@@ -8,6 +8,33 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **Enforcement layer (Phase 5)** — `guards/` + `bin/mc-guard.sh`. Master-Claude previously
+  distributed only instructions, which a model may or may not follow. These are enforced by the
+  harness itself: a `permissions.deny` rule set plus `PreToolUse` hooks that block destructive
+  commands regardless of what the agent decides. `mc-guard.sh install|verify|audit|uninstall`
+  merges into `~/.claude/settings.json` (backs up first, preserves foreign hooks, idempotent).
+- **Dirty-aware git guard** — `guards/guard-bash.sh` blocks `git checkout <path>`, `restore`,
+  `reset --hard`, `clean -f`, and bare `stash` **only when the target has uncommitted changes**.
+  A static deny rule cannot make this distinction: those commands are legitimate on a clean tree
+  and destroy unrecoverable work on a dirty one. Also blocks `sed -i`/`perl -i`, `sudo`,
+  recursive removal of a home/workspace root, and recursive `chown` on the NTFS mount. Parses
+  compound commands, wrappers, and env prefixes so the checks cannot be trivially evaded.
+- **`guards/guard-write.sh`** — blocks Write/Edit to `.git` internals, `~/.ssh`, `/etc`, `.env`,
+  and Claude Code settings files.
+- **`bin/mc-guard.sh audit`** — read-only permission-surface audit across every project's
+  `.claude/settings*.json`, flagging bare tool names in `allow` (which match every use of a tool)
+  and indirection rules whose payload lives in a repo-editable file (`Bash(npm run *)` runs
+  whatever `package.json` defines; `cargo test` compiles and runs `build.rs`).
+- **Security-review rule files** — `guards/claude-security-guidance.md` and
+  `guards/security-patterns.json` for the `security-guidance` plugin, derived from modules 60
+  and 50; symlinked into `~/.claude/` by `mc-guard.sh install`.
+- **Tiered subagents** — `agents/scout.md` (Haiku, read-only locator), `agents/sweeper.md`
+  (Sonnet, fully-specified mechanical edits), `agents/verifier.md` (Sonnet, runs quality gates
+  and reports verbatim). `bin/mc-commands.sh --agents` registers them.
+- **Module 91 — Agent & Assistant System Architecture** (`master-core/modules/` +
+  `docs/knowledge/`): five-layer split, tool-contract boundary, memory tiers with explicit
+  read-after-write visibility, routing lanes, observability, and a failure-mode table. For
+  projects where an LLM is a component rather than the deliverable.
 - **Versioned core**: `master-core/VERSION`; `mc-install` stamps `<!-- mc-core: … -->` into the
   generated `AGENTS.md`; `mc-sync` reports the version delta and `mc-doctor` flags drift.
 - **`mc-install --modules <list>`**: install only selected modules (e.g. `--modules 10,30,60`)
@@ -33,6 +60,42 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- `master-core/VERSION` 0.1.0 -> 0.2.0 (additive: new module + new tooling, no behavior removed).
+- `master-core/AGENTS.base.md`: added a **Delegation** section (match the model to the work;
+  delegate down to scout/sweeper/verifier) and a note that some rules are enforced by the
+  harness, so a denial is a correct outcome rather than an obstacle to route around.
+- `bin/mc-commands.sh`: now registers either `commands/` or `agents/` (`--agents`, `--commands`).
+- `bin/mc-doctor.sh`: reports whether the enforcement layer is installed.
+- `bin/mc-selfcheck.sh`: asserts guards are executable and the guard rule files parse.
+- CI shellcheck now covers `guards/*.sh` alongside `bin/*.sh` and `test/run.sh`.
+- **Markdown lint gate** — `.markdownlint.json` plus a version-pinned `markdownlint-cli2@0.22.0`
+  CI step. Config records a rationale per exemption: `MD013` (line-length), `MD033` (inline
+  HTML — the managed-block markers are HTML comments by design), `MD060` (hand-aligned tables)
+  and `MD041` are disabled per module 40's rule about linters that fight legitimate technical
+  formatting; `MD024` is scoped `siblings_only` for Keep a Changelog's repeated section
+  headings. That took 1220 raw findings to 148 real ones, all now fixed: 137 auto-fixed
+  (blanks around headings/lists/tables/fences), 7 emphasis-as-heading converted to real `###`
+  headings in the pattern library, 4 code fences given a `text` language. Repo is at 0 errors
+  across 70 files.
+- `guard-bash.sh`: quote the separator inside `${_target%%"$NL"*}` (SC2295) — an unquoted
+  expansion there is treated as a pattern.
+- **Dependency refresh** (full audit of every pinned ref; this repo has no package manifests,
+  so its dependencies are the workflow pins and the linter pin):
+  - `anthropics/claude-code-action` `52113681` -> `fa7e2f0a` (the current `v1`; Claude Code
+    2.1.193 -> 2.1.217, Agent SDK 0.3.193 -> 0.3.217), in `claude.yml` and
+    `claude-code-review.yml`. Resolved by dereferencing the **annotated tag object** to its
+    commit — `git/ref/tags/v1` returns the tag object's own SHA, which is not a commit and
+    would have been an invalid pin.
+  - `markdownlint-cli2` 0.22.0 -> 0.23.1 (markdownlint 0.41.1); verified the repo still
+    reports 0 issues under the newer engine before pinning it.
+  - `actions/checkout@v7`, `github/codeql-action@v4`, and `rhysd/actionlint`
+    `1.7.12@sha256:b1934ee5…` verified already current and left unchanged. The actionlint
+    digest was confirmed against the tag's **manifest-list** digest — `docker manifest
+    inspect … .manifests[0].digest` returns a per-platform digest instead and falsely
+    suggests the pin has drifted.
+- `test/run.sh`: five new groups (13-17) covering dirty-vs-clean git behavior, in-place/sudo/
+  evasion paths, guard-write protected paths, install idempotency with a foreign hook present,
+  and clean uninstall.
 - Completeness-critic pass over `master-core/modules/`: consolidated cross-module duplication.
   Module 20's *Golden vectors* and *Exactness honesty* rules are now the canonical home (module 90
   references them), and the "migrate stable decisions" rule moved to module 80 (removed the

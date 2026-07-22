@@ -21,15 +21,18 @@ and `<project>/.claude/commands/`, not this repo's `commands/`):
 
 ```sh
 bin/mc-commands.sh --global     # symlinks commands/*.md -> ~/.claude/commands/ (collision-safe)
+bin/mc-commands.sh --agents     # symlinks agents/*.md   -> ~/.claude/agents/
+bin/mc-guard.sh    install      # enforcement layer: deny rules + PreToolUse guards
 ```
 
 Then restart Claude Code (or reload) so `/mc-setup`, `/mc-setup-all`, `/mc-curate` appear.
+Hooks load at session start, so the guards arm on the next session, not the current one.
 
 ## Quick start
 
 **One command does everything.** Inside any project (new or existing), run:
 
-```
+```text
 /mc-setup
 ```
 
@@ -51,6 +54,8 @@ bin/mc-install.sh /path/to/project --lang rust [--inline] [--trim]   # low-level
 bin/mc-doctor.sh  /path/to/project            # audit (size, drift, missing symlinks)
 bin/mc-promote.sh /path/to/project "slug" --date YYYY-MM-DD          # lesson -> shared memory
 bin/mc-retrofit.sh --dry-run /path/to/project # preview a retrofit (never modifies)
+bin/mc-guard.sh   audit                       # read-only permission-surface audit (all projects)
+bin/mc-guard.sh   verify                      # is the enforcement layer installed and intact?
 ```
 
 ## How it fits together
@@ -60,9 +65,10 @@ bin/mc-retrofit.sh --dry-run /path/to/project # preview a retrofit (never modifi
 | Knowledge (read) | `docs/knowledge/` | The 16 competency areas, human-facing |
 | Distributable core | `master-core/` | Slim modules installed into projects (<200 lines each) |
 | Memory | `memory-core/` | Generalized cross-project facts (schema v2) |
-| Assets | `commands/`, `skills/`, `templates/` | Shared agent assets + starter stubs |
-| Tooling | `bin/` | apply · apply-all · install · sync · doctor · promote · retrofit · commands |
-| Verification | `test/`, `.github/` | self-test harness + CI (lint, tests, curation guard) |
+| Enforcement | `guards/` | Deny rules + PreToolUse hooks the **harness** enforces, not the model |
+| Assets | `commands/`, `agents/`, `skills/`, `templates/` | Shared agent assets + starter stubs |
+| Tooling | `bin/` | apply · apply-all · install · sync · doctor · promote · retrofit · commands · guard |
+| Verification | `test/`, `.github/` | self-test harness + CI (shell/workflow/markdown lint, tests, curation guard) |
 | Plan | `to-dos/` | Phase-based execution roadmap |
 
 ## Design principles
@@ -75,6 +81,10 @@ bin/mc-retrofit.sh --dry-run /path/to/project # preview a retrofit (never modifi
   in the shared core.
 - **Additive & safe.** Installing/retrofitting backs up existing files; retrofit is dry-run
   by default and changes nothing until you say so.
+- **Enforce what must not be violated.** Instructions shape what an agent *tries*; only
+  permission rules and hooks decide what it *may do*. `guards/` covers the small set of actions
+  that destroy unrecoverable work — and only in the destructive case, so the guard stays
+  trustworthy: `git checkout <path>` is blocked on a dirty tree and allowed on a clean one.
 
 Start with `docs/00-OVERVIEW.md`, then `docs/01-KNOWLEDGE-TAXONOMY.md`.
 
