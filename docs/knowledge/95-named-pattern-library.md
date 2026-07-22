@@ -16,6 +16,7 @@ Every entry uses the same five-part structure. Keep each part to a few lines —
 - **Applies-to** — when to reach for it (and, where useful, when not to).
 
 Rules for the library itself:
+
 - One pattern = one stable Name. Do not silently redefine an existing Name; add a new one.
 - Patterns are **mechanisms**, not measurements. Abstract away hardware-specific limits, exact chip names, and repo-specific jargon — a clamp value is project-bound; "validate a limit before applying an extreme setting, step toward it, roll back on failure" is the pattern.
 - Deduplicate aggressively. If two entries differ only in domain, merge them under the more general Name.
@@ -23,49 +24,56 @@ Rules for the library itself:
 
 ## Exemplar patterns
 
-**Central-State Ownership**
+### Central-State Ownership
+
 - *Problem*: shared mutable state reached from many places produces aliasing bugs, race conditions, and unclear ownership.
 - *Solution*: give each piece of long-lived state a single owner accessed through one explicit, controlled handle; mutate only through that handle.
 - *Implementation*: a global/once-initialized holder exposing `with(|state| …)`-style scoped access; mutation guarded by a lock inside the holder; ad-hoc globals eliminated, with each justified exception documented.
 - *Evidence*: codebases that replaced scattered mutable globals with a single owned accessor eliminated whole classes of init-order and data-race bugs; the few remaining exceptions are explicitly justified and annotated.
 - *Applies-to*: any cross-cutting state (managers, registries, caches). Not needed for short-lived local values.
 
-**Read-Before-Write**
+### Read-Before-Write
+
 - *Problem*: blind writes overwrite content the author had not seen, destroying structure or concurrent edits.
 - *Solution*: always read and understand a file/resource's current content before modifying it; edit in place rather than overwrite.
 - *Implementation*: Read → analyze structure → plan change → apply a targeted edit; reserve full-write for genuinely new files.
 - *Evidence*: a mandated, repo-spanning rule precisely because unconditional overwrites repeatedly clobbered existing work; it is the first rule in multiple project guides.
 - *Applies-to*: every modification of an existing artifact. Skip only when creating a brand-new file.
 
-**Dry-Run-First Destructive Op**
+### Dry-Run-First Destructive Op
+
 - *Problem*: operations that touch many files or external state are irreversible if wrong, and "wrong" is discovered only after damage.
 - *Solution*: default any destructive/bulk operation to a no-op preview that reports exactly what *would* change; require explicit opt-in (and ideally typed confirmation) to execute.
 - *Implementation*: a `--dry-run`-style default plus a backup of anything replaced; high-blast-radius actions demand a confirmation token and an audit-log entry.
 - *Evidence*: retrofit/restore tooling defaults to preview, backs up replaced files, and gates execution on explicit confirmation — because a silent bulk mutation across a tree is unrecoverable.
 - *Applies-to*: mass edits, restores, migrations, deletes, anything modifying state outside the current repo.
 
-**Golden-Vector Parity**
+### Golden-Vector Parity
+
 - *Problem*: behavior that must stay constant (across two language implementations, or across versions) drifts silently, invalidating every downstream result.
 - *Solution*: pin the behavior to a canonical set of input→output vectors and assert against them in CI; change a vector only on an *intentional* behavior change.
 - *Implementation*: committed golden vectors; a parity/regression test that fails on any divergence; accidental drift treated as a hard failure, not a refresh.
 - *Evidence*: accuracy-critical cores enforce Python↔native parity against canonical vectors precisely because undetected drift corrupts results invisibly.
 - *Applies-to*: cross-language duplicates, serialization formats, deterministic algorithms. Not for genuinely nondeterministic output.
 
-**Managed-Block Generated-vs-Hand-Authored**
+### Managed-Block Generated-vs-Hand-Authored
+
 - *Problem*: regenerating or syncing content into a file that also holds hand-written content clobbers the human edits — or hand edits clobber the generated part.
 - *Solution*: separate machine-managed regions from hand-authored regions with explicit markers, and only ever rewrite the managed region.
 - *Implementation*: clearly delimited managed blocks (or a managed file imported by a hand-owned one); the generator rewrites only inside the markers and preserves everything outside.
 - *Evidence*: distribution/install tooling that injects modules into existing config files survives re-runs by confining itself to a managed block, leaving user content intact.
 - *Applies-to*: codegen into shared files, config injection, doc sync. Not needed when the whole file is machine-owned.
 
-**Feature-Flag Additive Change**
+### Feature-Flag Additive Change
+
 - *Problem*: new capability risks changing default behavior and breaking existing consumers.
 - *Solution*: land new behavior behind an off-by-default flag so default builds stay behavior-identical; promote to default only after it proves out.
 - *Implementation*: conditional compilation / runtime flag gating the new path; default path unchanged; both paths tested.
 - *Evidence*: additive features shipped off-by-default keep default builds byte-for-byte equivalent, letting a release stay backward-compatible (a MINOR bump, not MAJOR).
 - *Applies-to*: new optional capabilities, risky optimizations, platform-specific paths. Not for fixes that must apply universally.
 
-**Context-Aware Validation**
+### Context-Aware Validation
+
 - *Problem*: a validator that assumes one canonical state reports false failures when the system is correctly in a *different* valid mode, eroding trust in the check.
 - *Solution*: detect the current operating mode first, then validate against that mode's expected state; flag only genuine mismatches.
 - *Implementation*: mode/profile detection → mode-specific expectations → actionable messaging that names the detected mode.

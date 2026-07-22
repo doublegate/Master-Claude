@@ -4,9 +4,11 @@ Project-agnostic. Reads the latest CI failure, categorizes it, and proposes a lo
 targeted fix. Derived from the recurring ci-debug command.
 
 ## Usage
+
 `/ci-debug [run-id]`  — defaults to the latest failed run on the current branch.
 
 ## Steps
+
 1. Fetch the failing run: `gh run view <id> --log-failed` (or the platform equivalent).
 2. Extract failed jobs/steps; categorize the error: test | build | lint/format | type |
    timeout | platform-specific | flaky.

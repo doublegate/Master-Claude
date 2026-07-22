@@ -17,7 +17,7 @@ re-deriving conventions the agents already knew elsewhere.
 
 ## The solution, in one diagram
 
-```
+```text
    ~/Code/*  (89 projects, 3 agents)
         │  harvest + curate (one-time + ongoing promotion)
         ▼

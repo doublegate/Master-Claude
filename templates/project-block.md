@@ -1,4 +1,5 @@
 <<< MC-PROJECT-START >>>
+
 ## Project: {{PROJECT_NAME}}
 
 > Hand-authored. `mc-sync` never overwrites content between the MC-PROJECT markers.
@@ -12,15 +13,19 @@
 - **Lint / format gate:** `{{linter}}` / `{{formatter --check}}`
 
 ### Architecture — load-bearing facts
+
 - {{cross-cutting decision 1 — e.g. who owns mutable state, the timing master, the dep direction}}
 - {{cross-cutting decision 2}}
 
 ### Gotchas / institutional knowledge
+
 - {{non-obvious thing that has bitten us — exact tool flag, platform quirk, hardware limit, etc.}}
 
 ### Where things live
+
 - {{path}} — {{purpose}}
 
 ### Status / next
+
 - See `CLAUDE.local.md` for volatile session state (current phase/sprint, recent decisions).
 <<< MC-PROJECT-END >>>

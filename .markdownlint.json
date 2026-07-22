@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint/main/schema/markdownlint-config-schema.json",
+
+  "//": "Master-Claude markdown lint config. Module 40 (docs-and-adrs) says to disable rules",
+  "// ": "that fight legitimate long technical tables or HTML banners by design, and to keep",
+  "//  ": "the substantive structural rules enforced. That is exactly the split below.",
+
+  "MD013": false,
+  "//MD013": "line-length: the modules are dense reference tables and long decision bullets. Wrapping them to 80 columns hurts scanability and would churn every file. 972 of 1220 findings.",
+
+  "MD033": false,
+  "//MD033": "no-inline-html: the managed-block markers (<<< MC-PROJECT-START >>>) and the mc-core version stamp are HTML comments by design -- they are how the tooling finds its own region.",
+
+  "MD060": false,
+  "//MD060": "table-column-style: pipe tables are hand-aligned for source readability, not normalized.",
+
+  "MD041": false,
+  "//MD041": "first-line-heading: generated AGENTS.md files legitimately open with the managed-by comment, not a heading.",
+
+  "MD024": { "siblings_only": true },
+  "//MD024": "no-duplicate-heading: Keep a Changelog repeats '### Added'/'### Changed' under every version. Sibling-only scoping is the standard accommodation.",
+
+  "MD046": { "style": "fenced" },
+  "MD048": { "style": "backtick" },
+  "MD049": { "style": "asterisk" },
+  "MD050": { "style": "asterisk" }
+}

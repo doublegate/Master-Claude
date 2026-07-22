@@ -4,9 +4,11 @@ Project-agnostic. Measures performance across two git refs and flags regressions
 Derived from the recurring bench-compare command.
 
 ## Usage
+
 `/bench-compare <baseline-ref> <comparison-ref> [bench-target]`
 
 ## Steps
+
 1. Confirm a benchmark harness exists (`master-core/lang/<lang>.md`: `cargo bench`,
    `pytest-benchmark`, `vitest bench`, or a project script). If none, stop and say so.
 2. For each ref: checkout (clean tree required), build release, run the bench (warmup + >=10

@@ -9,6 +9,7 @@ Opt-in migration path for the ~126 existing agent files. **Status: DRY-RUN COMPL
 - [x] Verified against a real project (ProRT-IP): `git status` unchanged before/after.
 
 ## When you choose to actually retrofit (future, opt-in, per project)
+
 - [ ] Validate dry-run output across Rust / TS / Python / multi-lang representatives.
 - [ ] Implement `--apply` (gated, interactive confirm) once the dry-run output is trusted.
 - [ ] Retrofit in small batches; run `mc-doctor.sh` after each; keep `*.mc-bak` until verified.

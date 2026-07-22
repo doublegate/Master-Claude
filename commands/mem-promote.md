@@ -4,9 +4,11 @@ Lifts a project-scoped memory fact that has generalized (proven useful in 2+ pro
 Master-Claude shared `memory-core/`, then prompts you to curate out the project specifics.
 
 ## Usage
+
 `/mem-promote <project-dir> <fact-slug>`
 
 ## Steps
+
 1. Run `bin/mc-promote.sh <project-dir> <fact-slug> --date <today>` (supply today's date — the
    script cannot read the clock).
 2. Open the new `memory-core/<fact-slug>.md`: strip project-specific names/numbers, confirm

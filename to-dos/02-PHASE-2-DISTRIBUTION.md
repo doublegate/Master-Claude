@@ -15,6 +15,7 @@
 - [x] `shellcheck` clean across all `bin/*.sh`.
 
 ## Carryover (optional)
+
 - [ ] `--inline` currently bakes all modules (~490 lines); add `--modules <list>` to inline a
       curated subset for size-sensitive projects.
 - [ ] Optional `.codex`/`.gemini` pointer-file generation for discoverability.
