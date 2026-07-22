@@ -37,6 +37,21 @@
 
 - Validate external input at boundaries; never `unwrap`/trust unvalidated data.
 - Secrets via environment variables only; never hardcode; never leak secrets in errors or logs.
+- Some rules are enforced by the harness, not by you: `permissions.deny` entries and the
+  `guards/` PreToolUse hooks block destructive commands outright. A denial is a correct
+  outcome, not an obstacle — read the reason and take the suggested route instead of
+  looking for a way around it.
+
+## Delegation
+
+- Match the model to the work. Mechanical work does not need the most expensive model.
+- Delegate down: **scout** (locate files/symbols, read-only) and **verifier** (run the
+  quality gates and report verbatim) for chores; **sweeper** for a transformation that is
+  already fully specified. Keep design, diagnosis, and judgement on the primary model.
+- Delegate a broad search rather than running the sweep inline when the intermediate file
+  listings would be noise; you need the conclusion, not the dump.
+- Give a subagent an explicit spec. A subagent starts with a fresh context and cannot see
+  the reasoning that led to the request, so ambiguity becomes a wrong uniform change.
 
 ## Project-specific section
 
