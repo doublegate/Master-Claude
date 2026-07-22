@@ -1,0 +1,83 @@
+{
+  "_comment": [
+    "Custom per-edit patterns for the security-guidance plugin. Deterministic string/regex",
+    "matches run on every Edit/Write with no model call, so this layer is free.",
+    "",
+    "JSON rather than YAML on purpose: the plugin needs PyYAML importable to read a .yaml",
+    "file and silently ignores it otherwise, while the .json form works on any Python.",
+    "",
+    "Installed at ~/.claude/security-patterns.json (user scope, every project).",
+    "Additive: the plugin's built-in patterns still fire. Cap is 50 rules.",
+    "Regexes are Python syntax, matched against the edited content.",
+    "'paths' globs match the full file path, so project-relative patterns need a ** prefix."
+  ],
+  "patterns": [
+    {
+      "rule_name": "hardcoded_credential_prefix",
+      "substrings": ["sk_live_", "sk-ant-", "AKIA", "ghp_", "github_pat_", "xoxb-", "-----BEGIN PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----"],
+      "reminder": "Hardcoded credential prefix. Load it from the environment or a secret store; never commit a literal key (master-core module 60)."
+    },
+    {
+      "rule_name": "rust_unsafe_block",
+      "regex": "(^|[^A-Za-z_])unsafe\\s*\\{",
+      "paths": ["**/*.rs"],
+      "reminder": "unsafe block. Module 50 requires an immediately preceding // SAFETY: comment stating the invariant relied on and who guarantees it (pointer validity, length, lifetime, null-termination). Add one if it is missing."
+    },
+    {
+      "rule_name": "rust_unwrap_on_parsed_input",
+      "regex": "(from_utf8|from_str|parse|deserialize|from_slice|read_to_string|recv|accept)\\s*\\([^)]*\\)\\s*\\.\\s*(unwrap|expect)\\s*\\(",
+      "paths": ["**/*.rs"],
+      "reminder": "unwrap/expect directly on a parse or I/O result. If this value can originate outside the process, return a typed error instead: module 60 forbids panicking on untrusted input."
+    },
+    {
+      "rule_name": "python_unsafe_deserialization",
+      "substrings": ["pickle.load", "pickle.loads", "yaml.load(", "marshal.loads", "shelve.open"],
+      "paths": ["**/*.py"],
+      "reminder": "Unsafe deserialization. pickle/marshal execute arbitrary code on load; yaml.load without SafeLoader does too. Use json, or yaml.safe_load."
+    },
+    {
+      "rule_name": "python_shell_injection_surface",
+      "regex": "(os\\.system|os\\.popen|subprocess\\.(call|run|Popen|check_output)\\s*\\([^)]*shell\\s*=\\s*True)",
+      "paths": ["**/*.py"],
+      "reminder": "Shell execution with a composed string. Pass an argument list and shell=False so caller-controlled data cannot become a command."
+    },
+    {
+      "rule_name": "sql_string_interpolation",
+      "regex": "(SELECT|INSERT|UPDATE|DELETE)[^\"';]{0,200}(\\+\\s*[A-Za-z_]|%s?\\s*%|\\$\\{|f\"|format\\()",
+      "reminder": "SQL assembled by concatenation or interpolation. Module 50 requires an ORM, query builder, or parameterized statements."
+    },
+    {
+      "rule_name": "dom_injection",
+      "substrings": ["dangerouslySetInnerHTML", ".innerHTML =", "document.write(", "eval(", "new Function("],
+      "paths": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.svelte", "**/*.vue"],
+      "reminder": "DOM injection or dynamic code execution sink. If any part of this value is caller-controlled it is an XSS/RCE path; render as text or sanitize at the boundary."
+    },
+    {
+      "rule_name": "secret_in_log_or_error",
+      "regex": "(log|logger|println!|eprintln!|console\\.(log|error|warn)|print|printf)[^\\n]{0,80}(password|passwd|secret|token|api_?key|private_?key|credential|authorization)",
+      "reminder": "Possible secret reaching a log or error message. Module 60: errors state what failed plus a correlation ID, never the sensitive value."
+    },
+    {
+      "rule_name": "tls_verification_disabled",
+      "substrings": ["verify=False", "rejectUnauthorized: false", "danger_accept_invalid_certs", "InsecureSkipVerify", "NODE_TLS_REJECT_UNAUTHORIZED"],
+      "reminder": "TLS certificate verification disabled. This silently converts every connection into an interceptable one; scope it to a test fixture or remove it."
+    },
+    {
+      "rule_name": "ci_workflow_edit",
+      "regex": "(permissions:|pull_request_target|secrets\\.|actions/checkout)",
+      "paths": ["**/.github/workflows/**"],
+      "reminder": "Workflow edit touching permissions, secrets, or checkout. Workflow files grant repository-level access; confirm the trigger cannot run untrusted code with write scope (pull_request_target plus a PR checkout is the classic escalation)."
+    },
+    {
+      "rule_name": "unpinned_ci_action",
+      "regex": "uses:\\s*[^@\\n]+@(main|master|v?\\d+)\\s*$",
+      "paths": ["**/.github/workflows/**"],
+      "reminder": "CI action pinned to a mutable ref. Pin to an immutable commit digest, as this repo's ci.yml already does for actionlint."
+    },
+    {
+      "rule_name": "path_traversal_surface",
+      "regex": "(open|read_file|readFile|fs\\.read|Path::new|os\\.path\\.join)\\s*\\([^)]*(req\\.|request\\.|params|query|argv|user_input|body\\.)",
+      "reminder": "Filesystem path built from caller-controlled input. Normalize and confine to an allowed root before opening."
+    }
+  ]
+}

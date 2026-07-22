@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "Static permissions.deny rules merged into ~/.claude/settings.json by bin/mc-guard.sh.",
+    "These are the cheap first line; guards/guard-bash.sh does the robust parse.",
+    "Both layers are needed: the Claude Code permissions docs warn that Bash patterns",
+    "constraining arguments are fragile, and a rule cannot consult git status.",
+    "",
+    "deny is evaluated before ask and allow, and the first match wins, so these hold",
+    "even though the allow list contains a bare \"Bash\". A deny rule also matches past",
+    "leading env assignments, so Bash(sudo *) still catches FOO=bar sudo id.",
+    "",
+    "Only unconditionally-wrong commands live here. Anything context-dependent (git",
+    "checkout on a clean tree is fine, on a dirty tree it is not) belongs in the hook.",
+    "",
+    "The sed/perl entries deliberately match only the leading '-i' form. The broader",
+    "'sed *-i*' also matches any filename containing '-i' (sed -e 's/x/y/' build-init.sh),",
+    "which would deny legitimate commands. guard-bash.sh parses the argument list properly",
+    "and catches the clustered and wrapped forms, so nothing is lost by narrowing here."
+  ],
+  "deny": [
+    "Bash(sudo *)",
+    "Bash(doas *)",
+    "Bash(pkexec *)",
+    "Bash(git reset --hard*)",
+    "Bash(git clean -f*)",
+    "Bash(git clean -xf*)",
+    "Bash(git clean -df*)",
+    "Bash(sed -i*)",
+    "Bash(perl -i*)",
+    "Bash(chown -R *)",
+    "Bash(chown --recursive *)",
+    "Read(**/.env)",
+    "Read(**/.env.*)",
+    "Read(**/*.pem)",
+    "Read(**/id_rsa*)",
+    "Read(**/id_ed25519*)",
+    "Read(~/.ssh/**)",
+    "Read(~/.gnupg/**)"
+  ]
+}

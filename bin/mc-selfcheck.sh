@@ -66,5 +66,21 @@ for m in "$REPO"/master-core/modules/[0-9]*.md; do
 done
 [ "$miss" -eq 0 ] && ok "knowledge docs and core modules aligned"
 
+# 6. enforcement layer is intact: guards runnable, rule files parseable
+gbad=0
+for g in "$REPO"/guards/guard-bash.sh "$REPO"/guards/guard-write.sh; do
+  [ -x "$g" ] || { fail "guard not executable: $(basename -- "$g")"; gbad=$((gbad+1)); }
+done
+[ -f "$REPO/guards/guard-lib.sh" ] || { fail "guards/guard-lib.sh missing"; gbad=$((gbad+1)); }
+if command -v jq >/dev/null 2>&1; then
+  for j in "$REPO"/guards/deny-rules.json "$REPO"/guards/security-patterns.json; do
+    [ -f "$j" ] || { fail "missing $(basename -- "$j")"; gbad=$((gbad+1)); continue; }
+    jq -e . "$j" >/dev/null 2>&1 || { fail "invalid JSON: $(basename -- "$j")"; gbad=$((gbad+1)); }
+  done
+  n=$(jq '.deny | length' "$REPO/guards/deny-rules.json" 2>/dev/null || printf 0)
+  [ "$n" -gt 0 ] || { fail "deny-rules.json has no rules"; gbad=$((gbad+1)); }
+fi
+[ "$gbad" -eq 0 ] && ok "enforcement layer intact (guards executable, rule files valid)"
+
 printf 'mc-selfcheck: %d failure(s)\n' "$fails"
 [ "$fails" -eq 0 ]
