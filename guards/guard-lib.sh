@@ -42,6 +42,22 @@ guard_deny() {
   exit 0
 }
 
+# guard_ask <reason>: force a confirmation prompt even where permissions would have
+# auto-approved. For shapes that are routinely legitimate but are also exactly how an
+# injected instruction would exfiltrate or execute — denying those outright would break
+# ordinary work, and staying silent is what makes `defaultMode: auto` dangerous. The
+# middle tier puts a human in the loop without blocking the workflow.
+guard_ask() {
+  jq -n --arg r "$1" '{
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "ask",
+      permissionDecisionReason: $r
+    }
+  }'
+  exit 0
+}
+
 # guard_pass: no decision; the normal permission flow applies.
 guard_pass() {
   exit 0

