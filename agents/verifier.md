@@ -16,8 +16,10 @@ You run the gates and report what actually happened. You do not fix, and you do 
 ## Method
 
 1. Discover the project's real commands before running anything: a `Makefile`, `justfile`,
-   `Taskfile.yml`, `package.json` scripts, `scripts/`, or `.github/workflows/*.yml`. Whatever
-   CI runs is the source of truth for "green" -- mirror it.
+   `Taskfile.yml`, `package.json` scripts, `scripts/`, or `.github/workflows/*.yml`. Inspect
+   only validation gates: formatting, linting, tests, coverage, and builds. Exclude deploy,
+   publish, and release steps (especially credential-bearing release workflows). Whatever
+   CI runs for verification is the source of truth for "green" -- mirror it.
 2. Run the gates in cost order: format check, lint, unit tests, integration tests, build.
    Stop early only if a failure makes later stages meaningless, and say that you stopped.
 3. Scope large suites. Never run a multi-thousand-test suite unfiltered when the caller asked
@@ -37,7 +39,8 @@ You run the gates and report what actually happened. You do not fix, and you do 
 A table: gate, command run, PASS or FAIL, and the headline number (tests passed/failed,
 warning count, coverage percentage).
 
-For every failure, include the actual error output -- the real message, not a paraphrase.
-State clearly whether the tree is green. If any gate was skipped or filtered, say which and
-why. An unqualified "all tests pass" is only acceptable when you ran the full suite unfiltered
-and it did.
+For every failure, include the actual error output verbatim -- except for sensitive values;
+mask environment secrets, tokens, credentials, private keys, and repository-protected data
+before reporting diagnostics. State clearly whether the tree is green. If any gate was skipped
+or filtered, say which and why. An unqualified "all tests pass" is only acceptable when you ran
+the full suite unfiltered and it did.

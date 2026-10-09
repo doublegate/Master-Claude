@@ -89,7 +89,8 @@ guard_normalize() {
       -*) break ;;
       *=*) _s=$(guard_trim "${_s#* }"); continue ;;
     esac
-    case "$_first" in
+    _cmd=${_first##*/}
+    case "$_cmd" in
       timeout|stdbuf)
         _s=$(guard_trim "${_s#* }")            # drop wrapper
         _s=$(guard_trim "${_s#* }") ;;         # drop its argument
@@ -99,6 +100,27 @@ guard_normalize() {
           -n\ *) _s=$(guard_trim "${_s#* }"); _s=$(guard_trim "${_s#* }") ;;
           -*)    _s=$(guard_trim "${_s#* }") ;;
         esac ;;
+      env)
+        _s=$(guard_trim "${_s#* }")
+        while [ -n "$_s" ]; do
+          _opt=${_s%% *}
+          case "$_opt" in
+            -u) _s=$(guard_trim "${_s#* }"); _s=$(guard_trim "${_s#* }") ;;
+            --unset=*) _s=$(guard_trim "${_s#* }") ;;
+            -*) _s=$(guard_trim "${_s#* }") ;;
+            *=*) _s=$(guard_trim "${_s#* }") ;;
+            *) break ;;
+          esac
+        done ;;
+      exec)
+        _s=$(guard_trim "${_s#* }")
+        while [ -n "$_s" ]; do
+          _opt=${_s%% *}
+          case "$_opt" in
+            -*) _s=$(guard_trim "${_s#* }") ;;
+            *) break ;;
+          esac
+        done ;;
       time|nohup|command|builtin|noglob|xargs)
         _s=$(guard_trim "${_s#* }") ;;
       *) break ;;
@@ -107,8 +129,20 @@ guard_normalize() {
   printf '%s' "$_s"
 }
 
-# guard_words <subcommand>: print one argument per line (whitespace-split).
+# guard_words <subcommand>: print one argument per line (shell-syntax aware).
 guard_words() {
+  if command -v python3 >/dev/null 2>&1; then
+    _out=$(python3 -c 'import sys, shlex
+try:
+    for a in shlex.split(sys.argv[1]):
+        print(a)
+except Exception:
+    sys.exit(1)' "$1" 2>/dev/null || true)
+    if [ -n "$_out" ]; then
+      printf '%s\n' "$_out"
+      return 0
+    fi
+  fi
   printf '%s\n' "$1" | tr -s '[:space:]' '\n'
 }
 

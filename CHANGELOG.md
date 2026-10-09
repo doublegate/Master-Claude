@@ -105,9 +105,9 @@ All notable changes to this project are documented here. The format is based on
     digest was confirmed against the tag's **manifest-list** digest — `docker manifest
     inspect … .manifests[0].digest` returns a per-platform digest instead and falsely
     suggests the pin has drifted.
-- `test/run.sh`: five new groups (13-17) covering dirty-vs-clean git behavior, in-place/sudo/
+- `test/run.sh`: eight new groups (13-20) covering dirty-vs-clean git behavior, in-place/sudo/
   evasion paths, guard-write protected paths, install idempotency with a foreign hook present,
-  and clean uninstall.
+  clean uninstall, settings clobber prevention, cd-prefixed target repos, and network-egress prompts.
 - Completeness-critic pass over `master-core/modules/`: consolidated cross-module duplication.
   Module 20's *Golden vectors* and *Exactness honesty* rules are now the canonical home (module 90
   references them), and the "migrate stable decisions" rule moved to module 80 (removed the

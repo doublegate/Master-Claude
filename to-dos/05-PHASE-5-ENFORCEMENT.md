@@ -29,8 +29,8 @@ uncommitted work with `git checkout`).
       the `security-guidance` plugin, symlinked into `~/.claude/` on install.
 - [x] `agents/{scout,sweeper,verifier}.md` + `bin/mc-commands.sh --agents`.
 - [x] Module 91 (+ knowledge doc) — agent/assistant system architecture.
-- [x] `test/run.sh` groups 13-17; `mc-selfcheck` and `mc-doctor` report on the layer; CI lints
-      `guards/`.
+- [x] `test/run.sh` groups 13-20 (including live-session regressions 18-19 and egress group 20);
+      `mc-selfcheck` and `mc-doctor` report on the layer; CI lints `guards/`.
 
 ## Design decisions
 

@@ -32,7 +32,7 @@ while [ $# -gt 0 ]; do
     --copy) COPY=1; shift ;;
     --force) FORCE=1; shift ;;
     --list) LIST=1; shift ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     -*) die "unknown flag: $1" ;;
     *) die "unexpected arg: $1" ;;
   esac

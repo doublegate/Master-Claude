@@ -28,14 +28,14 @@ ROOT="$HOME/Code"
 DRY=0
 
 CMD="${1:-}"
-[ -n "$CMD" ] || { sed -n '2,20p' "$0"; exit 0; }
+[ -n "$CMD" ] || { sed -n '2,15p' "$0"; exit 0; }
 shift || true
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1; shift ;;
     --settings) SETTINGS="${2:-}"; shift 2 ;;
     --root) ROOT="${2:-}"; shift 2 ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
     *) die "unexpected arg: $1" ;;
   esac
 done
@@ -105,6 +105,9 @@ case "$CMD" in
     jq -e . "$SETTINGS" >/dev/null 2>&1 || die "settings file is not valid JSON: $SETTINGS"
     for g in "$G_BASH" "$G_WRITE"; do
       [ -x "$g" ] || die "guard not executable: $g (run: chmod +x guards/*.sh)"
+      case "$g" in
+        *[[:space:]\'\"\\\`\$\<\>\&\|\;]*) die "guard path contains spaces or shell metacharacters: $g" ;;
+      esac
     done
     OUT=$(jq --slurpfile d "$DENY_FILE" \
              --arg gbash "$G_BASH" --arg gwrite "$G_WRITE" \

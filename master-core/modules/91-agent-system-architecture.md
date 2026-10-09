@@ -1,8 +1,8 @@
 # 91 — Agent & Assistant System Architecture
 
 Project-agnostic rules for building systems where an LLM is a component, not the product:
-assistants, agents, orchestrators, MCP servers, memory services. Applies when you are the one
-shipping the harness. See `docs/knowledge/91-agent-system-architecture.md` for rationale.
+assistants, agents, orchestrators, MCP servers, and memory services. Applies when you ship
+the harness; keep detailed rationale in the project's accompanying architecture documentation.
 
 ## Layering
 
@@ -55,7 +55,7 @@ shipping the harness. See `docs/knowledge/91-agent-system-architecture.md` for r
   which memory was read or written. Every production disagreement reduces to one of these.
 - Track cost and token usage per route and per tenant, not only in aggregate.
 - Gate changes to prompts, routes, retrieval, and memory policy behind regression evals. Prompt
-  changes are code changes and deserve the same gate (module 30).
+  changes are code changes and deserve the same regression-evaluation gate.
 
 ## Failure modes → mitigation
 

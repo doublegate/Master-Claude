@@ -79,6 +79,9 @@ if command -v jq >/dev/null 2>&1; then
   done
   n=$(jq '.deny | length' "$REPO/guards/deny-rules.json" 2>/dev/null || printf 0)
   [ "$n" -gt 0 ] || { fail "deny-rules.json has no rules"; gbad=$((gbad+1)); }
+else
+  fail "jq is required to validate enforcement layer rule files"
+  gbad=$((gbad+1))
 fi
 [ "$gbad" -eq 0 ] && ok "enforcement layer intact (guards executable, rule files valid)"
 
