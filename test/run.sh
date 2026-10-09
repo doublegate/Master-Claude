@@ -96,7 +96,7 @@ check "mem-bridge --execute writes digest" test -f "$BH/master-memory.md"
 
 # --- 13-20. guards regression suite -----------------------------------------
 GUARDS="$REPO/guards"
-GB="$GUARDS/guard-bash.sh"
+export GB="$GUARDS/guard-bash.sh"
 . "$REPO/test/guard-tests.sh"
 
 if [ "$FAILS" -eq 0 ]; then printf '\nALL PASS\n'; else printf '\n%d FAILED\n' "$FAILS"; fi
