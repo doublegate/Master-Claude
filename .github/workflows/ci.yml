@@ -17,7 +17,7 @@ jobs:
       - name: Shell lint (shellcheck)
         # Fail on warning+ (errors/warnings); info/style notes are advisory and must not
         # break the build across shellcheck version drift between dev machines and CI.
-        run: shellcheck --severity=warning bin/*.sh guards/*.sh test/run.sh
+        run: shellcheck --severity=warning bin/*.sh guards/*.sh test/*.sh
 
       - name: Workflow lint (actionlint)
         # Lints .github/workflows for correctness and common security smells (e.g. injection).

@@ -79,8 +79,8 @@ All notable changes to this project are documented here. The format is based on
 - `bin/mc-commands.sh`: now registers either `commands/` or `agents/` (`--agents`, `--commands`).
 - `bin/mc-doctor.sh`: reports whether the enforcement layer is installed.
 - `bin/mc-selfcheck.sh`: asserts guards are executable and the guard rule files parse.
-- CI shellcheck now covers `guards/*.sh` alongside `bin/*.sh` and `test/run.sh`.
-- **Markdown lint gate** — `.markdownlint.json` plus a version-pinned `markdownlint-cli2@0.22.0`
+- CI shellcheck now covers `guards/*.sh` and `test/*.sh` alongside `bin/*.sh`.
+- **Markdown lint gate** — `.markdownlint.json` plus a version-pinned `markdownlint-cli2@0.23.1`
   CI step. Config records a rationale per exemption: `MD013` (line-length), `MD033` (inline
   HTML — the managed-block markers are HTML comments by design), `MD060` (hand-aligned tables)
   and `MD041` are disabled per module 40's rule about linters that fight legitimate technical

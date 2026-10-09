@@ -5,11 +5,11 @@
 check_egress_exec() {
   _c=$1
   if printf '%s' "$_c" | grep -Eq \
-     '(curl|wget)[^|]*\|[[:space:]]*(sh|bash|zsh|dash|ksh|python3?|perl|ruby|node)([[:space:]]|$)'; then
+     '(curl|wget)[^|]*\|[[:space:]]*([^|[:space:]]*/)?(sh|bash|zsh|dash|ksh|python3?|perl|ruby|node)([[:space:]]|$)'; then
     _ask_egress_exec
   fi
   if printf '%s' "$_c" | grep -Eq \
-     '(sh|bash|zsh|dash|ksh|python3?|perl|ruby|node)[[:space:]]+<\([[:space:]]*(curl|wget)'; then
+     '([^[:space:]]*/)?(sh|bash|zsh|dash|ksh|python3?|perl|ruby|node)[[:space:]]+<\([[:space:]]*(curl|wget)'; then
     _ask_egress_exec
   fi
   return 0
@@ -35,6 +35,8 @@ check_egress_upload() {
         case "$w" in *=@*) _ask_egress_upload "$w" ;; esac ;;
     esac
     case "$w" in
+      -T?*)
+        _ask_egress_upload "${w#-T}" ;;
       -d@*|--data=@*|--data-binary=@*|--data-ascii=@*|--data-urlencode=@*)
         _ask_egress_upload "$w" ;;
       --upload-file=*)

@@ -77,52 +77,65 @@ guard_trim() {
   printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
+_first_word() {
+  printf '%s' "$1" | awk '{print $1}'
+}
+
+_shift_word() {
+  printf '%s' "$1" | sed -e 's/^[[:space:]]*[^[:space:]]*[[:space:]]*//'
+}
+
 # guard_normalize <subcommand>: strip leading env assignments and the wrappers
 # Claude Code itself strips before rule matching, so `FOO=1 timeout 30 sed -i ...`
 # is judged as `sed -i ...`. Without this a guard is trivially evaded.
 guard_normalize() {
   _s=$(guard_trim "$1")
   while [ -n "$_s" ]; do
-    _first=${_s%% *}
-    [ "$_first" = "$_s" ] && break   # single word left: nothing to strip
+    _first=$(_first_word "$_s")
+    _next=$(_shift_word "$_s")
+    [ -z "$_next" ] && break
     case "$_first" in
       -*) break ;;
-      *=*) _s=$(guard_trim "${_s#* }"); continue ;;
+      *=*) _s=$(guard_trim "$_next"); continue ;;
     esac
     _cmd=${_first##*/}
     case "$_cmd" in
       timeout|stdbuf)
-        _s=$(guard_trim "${_s#* }")            # drop wrapper
-        _s=$(guard_trim "${_s#* }") ;;         # drop its argument
+        _s=$(guard_trim "$_next")
+        while [ -n "$_s" ]; do
+          _opt=$(_first_word "$_s"); _s=$(guard_trim "$(_shift_word "$_s")")
+          case "$_opt" in -*) ;; *) break ;; esac
+        done ;;
       nice)
-        _s=$(guard_trim "${_s#* }")
-        case "$_s" in
-          -n\ *) _s=$(guard_trim "${_s#* }"); _s=$(guard_trim "${_s#* }") ;;
-          -*)    _s=$(guard_trim "${_s#* }") ;;
-        esac ;;
+        _s=$(guard_trim "$_next")
+        while [ -n "$_s" ]; do
+          _opt=$(_first_word "$_s")
+          case "$_opt" in
+            -n) _s=$(guard_trim "$(_shift_word "$_s")"); _s=$(guard_trim "$(_shift_word "$_s")") ;;
+            -*) _s=$(guard_trim "$(_shift_word "$_s")") ;;
+            *) break ;;
+          esac
+        done ;;
       env)
-        _s=$(guard_trim "${_s#* }")
+        _s=$(guard_trim "$_next")
         while [ -n "$_s" ]; do
-          _opt=${_s%% *}
+          _opt=$(_first_word "$_s")
           case "$_opt" in
-            -u) _s=$(guard_trim "${_s#* }"); _s=$(guard_trim "${_s#* }") ;;
-            --unset=*) _s=$(guard_trim "${_s#* }") ;;
-            -*) _s=$(guard_trim "${_s#* }") ;;
-            *=*) _s=$(guard_trim "${_s#* }") ;;
+            -u) _s=$(guard_trim "$(_shift_word "$_s")"); _s=$(guard_trim "$(_shift_word "$_s")") ;;
+            --unset=*|-*|*=*) _s=$(guard_trim "$(_shift_word "$_s")") ;;
             *) break ;;
           esac
         done ;;
-      exec)
-        _s=$(guard_trim "${_s#* }")
+      time|nohup|command|builtin|noglob|xargs|exec)
+        _s=$(guard_trim "$_next")
         while [ -n "$_s" ]; do
-          _opt=${_s%% *}
+          _opt=$(_first_word "$_s")
           case "$_opt" in
-            -*) _s=$(guard_trim "${_s#* }") ;;
+            --) _s=$(guard_trim "$(_shift_word "$_s")"); break ;;
+            -*) _s=$(guard_trim "$(_shift_word "$_s")") ;;
             *) break ;;
           esac
         done ;;
-      time|nohup|command|builtin|noglob|xargs)
-        _s=$(guard_trim "${_s#* }") ;;
       *) break ;;
     esac
   done
@@ -149,6 +162,6 @@ except Exception:
 # guard_basename_cmd <subcommand>: the command word with any path stripped, so
 # /usr/bin/sed and sed are judged identically.
 guard_basename_cmd() {
-  _c=${1%% *}
+  _c=$(guard_words "$1" | head -n 1)
   printf '%s' "${_c##*/}"
 }

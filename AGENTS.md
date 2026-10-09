@@ -38,11 +38,11 @@ and keep that knowledge in sync inside any project. See `README.md` and `docs/00
 
 ## Build / verify
 
-- Shell lint: `shellcheck --severity=warning bin/*.sh guards/*.sh test/run.sh`
+- Shell lint: `shellcheck --severity=warning bin/*.sh guards/*.sh test/*.sh`
 - Markdown lint: `npx markdownlint-cli2@0.23.1 "**/*.md"` (config + per-rule rationale in
   `.markdownlint.json`; pin the version — an unpinned newer linter reports ungated rules).
 - Self-tests: `sh test/run.sh` (sandboxed: install/symlinks/idempotency/seed/trim/state/
-  retrofit-safety/self-guard, plus the guard behavior groups 13-19). CI
+  retrofit-safety/self-guard, plus the guard behavior groups 13-20). CI
   (`.github/workflows/ci.yml`) runs shell lint + workflow lint + markdown lint + tests + the
   <200-line curation guard on every push.
 - Slash commands live in `commands/`, subagents in `agents/`; register with

@@ -64,22 +64,22 @@ check_inplace() {
 # 4. Recursive removal of a root
 check_rm_root() {
   [ "$(guard_basename_cmd "$1")" = "rm" ] || return 0
-  _rec=0; _skip=1
+  _rec=0
+  for w in $(guard_words "$1"); do
+    case "$w" in
+      --recursive) _rec=1 ;;
+      --*) ;;
+      -*) if is_cluster "$w" r || is_cluster "$w" R; then _rec=1; fi ;;
+    esac
+  done
+  [ "$_rec" -eq 1 ] || return 0
+  _skip=1
   for w in $(guard_words "$1"); do
     if [ "$_skip" -eq 1 ]; then _skip=0; continue; fi
-    case "$w" in
-      --recursive) _rec=1; continue ;;
-      --*) continue ;;
-      -*) if is_cluster "$w" r || is_cluster "$w" R; then _rec=1; fi; continue ;;
-    esac
-    [ "$_rec" -eq 1 ] || continue
+    case "$w" in -*) continue ;; esac
     _t=${w%/}
     # shellcheck disable=SC2016,SC2088
-    case "$_t" in
-      '~/'*) _t="$HOME/${_t#'~/'}" ;;
-      '$HOME/'*) _t="$HOME/${_t#'$HOME/'}" ;;
-      '${HOME}/'*) _t="$HOME/${_t#'${HOME}/'}" ;;
-    esac
+    case "$_t" in '~/'*|'$HOME/'*|'${HOME}/'*) _t="$HOME/${_t#*/}" ;; esac
     # shellcheck disable=SC2016
     case "$_t" in
       ''|'~'|'$HOME'|'/'|'/home'|'/usr'|'/etc'|'/var'|'/boot'|'/mnt'|"$HOME")
@@ -123,17 +123,24 @@ check_settings_clobber() {
         esac
       done ;;
     cp|install|mv|ln)
-      _target=''; _prev=''
+      _target=''; _target_dir=''; _prev=''; _skip=1; _sources=''
       for w in $(guard_words "$_sub"); do
-        case "$_prev" in -t|--target-directory) _target=$w; break ;; esac
+        if [ "$_skip" -eq 1 ]; then _skip=0; continue; fi
+        case "$_prev" in -t|--target-directory) _target_dir=$w; _prev=''; continue ;; esac
+        _prev=''
         case "$w" in
-          --target-directory=*) _target=${w#--target-directory=}; break ;;
+          -t|--target-directory) _prev=$w ;;
+          --target-directory=*) _target_dir=${w#--target-directory=} ;;
           -*) ;;
-          *) _target=$w ;;
+          *) [ -n "$_target" ] && _sources="$_sources $_target"; _target=$w ;;
         esac
-        _prev=$w
       done
-      [ -n "$_target" ] && printf '%s' "$_target" | grep -Eq "$_SETTINGS_RE" && _deny_settings ;;
+      [ -n "$_target_dir" ] && _dest_dir=$_target_dir || _dest_dir=$_target
+      [ -n "$_target" ] && printf '%s' "$_target" | grep -Eq "$_SETTINGS_RE" && _deny_settings
+      if [ -n "$_target_dir" ] && [ -n "$_target" ]; then _sources="$_sources $_target"; fi
+      for s in $_sources; do
+        printf '%s/%s' "$_dest_dir" "${s##*/}" | grep -Eq "$_SETTINGS_RE" && _deny_settings
+      done ;;
   esac
   return 0
 }
