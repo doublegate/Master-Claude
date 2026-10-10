@@ -23,6 +23,8 @@ jobs:
       contents: read
       pull-requests: write
       issues: read
+      id-token: write
+      actions: read
 
     steps:
       - name: Checkout repository
@@ -37,6 +39,8 @@ jobs:
           github_token: ${{ github.token }}
           allowed_bots: 'Copilot'
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          additional_permissions: |
+            actions: read
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
