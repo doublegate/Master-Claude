@@ -71,5 +71,18 @@ fi
 # 5. stray backups
 ls "$PROJECT"/*.mc-bak >/dev/null 2>&1 && warn "leftover *.mc-bak backups present (review/remove)"
 
+# 6. enforcement layer (machine-wide, not per-project — reported here because this is the
+# audit users actually run). Guards live in user settings and apply to every project.
+GSETTINGS="$HOME/.claude/settings.json"
+if [ -f "$GSETTINGS" ] && command -v jq >/dev/null 2>&1; then
+  if jq -e 'any((.hooks.PreToolUse // [])[]; any((.hooks // [])[]; .command | test("guard-bash")))' \
+       "$GSETTINGS" >/dev/null 2>&1; then
+    nd=$(jq '(.permissions.deny // []) | length' "$GSETTINGS" 2>/dev/null || printf 0)
+    ok "guards installed (permissions.deny: $nd rules)"
+  else
+    warn "guards not installed — run bin/mc-guard.sh install (enforcement is machine-wide)"
+  fi
+fi
+
 printf 'mc-doctor: %d fail, %d warn\n' "$fails" "$warns"
 [ "$fails" -eq 0 ]

@@ -17,12 +17,19 @@ jobs:
       - name: Shell lint (shellcheck)
         # Fail on warning+ (errors/warnings); info/style notes are advisory and must not
         # break the build across shellcheck version drift between dev machines and CI.
-        run: shellcheck --severity=warning bin/*.sh test/run.sh
+        run: shellcheck --severity=warning bin/*.sh guards/*.sh test/*.sh
 
       - name: Workflow lint (actionlint)
         # Lints .github/workflows for correctness and common security smells (e.g. injection).
         # Pinned to a version + immutable digest for reproducibility (Dependabot keeps it fresh).
         run: docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
+
+      - name: Markdown lint (markdownlint-cli2)
+        # Version-pinned deliberately: module 40 notes that a newer linter reports rules the
+        # gate never agreed to, so an unpinned runner turns an unrelated release into a red
+        # build. Rule selection (what is enforced vs disabled by design) lives in
+        # .markdownlint.json with the rationale for each exemption.
+        run: npx --yes markdownlint-cli2@0.23.1 "**/*.md"
 
       - name: Self-tests
         run: sh test/run.sh

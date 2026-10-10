@@ -1,14 +1,16 @@
 #!/bin/sh
-# mc-commands.sh — register Master-Claude's command library where the agent can find it.
+# mc-commands.sh — register Master-Claude's shared agent assets where Claude Code finds them.
 # Claude Code only discovers slash commands in ~/.claude/commands (global) or
-# <project>/.claude/commands (project-scoped). This symlinks (or copies) the repo's
-# commands/*.md into one of those so /mc-setup et al. become available.
+# <project>/.claude/commands, and subagents in ~/.claude/agents. This symlinks (or copies)
+# the repo's commands/*.md or agents/*.md into one of those so /mc-setup et al. become
+# available, and so the scout/sweeper/verifier subagents resolve.
 #
-# Usage: mc-commands.sh [--global | --project <dir>] [--copy] [--force] [--list]
-#   --global (default)  install into ~/.claude/commands
-#   --project <dir>     install into <dir>/.claude/commands
+# Usage: mc-commands.sh [--global | --project <dir>] [--agents] [--copy] [--force] [--list]
+#   --global (default)  install into ~/.claude/<kind>
+#   --project <dir>     install into <dir>/.claude/<kind>
+#   --agents            install agents/ instead of commands/ (kind = agents)
 #   --copy              copy instead of symlink (default: symlink, so repo edits propagate)
-#   --force             replace a colliding command (backs it up to *.mc-bak first)
+#   --force             replace a colliding file (backs it up to *.mc-bak first)
 #   --list              just list what would be installed and any collisions
 set -eu
 
@@ -16,15 +18,17 @@ die() { printf 'mc-commands: %s\n' "$1" >&2; exit 1; }
 
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
-SRC="$REPO_ROOT/commands"
-[ -d "$SRC" ] || die "no commands/ dir in repo"
 
-DEST="$HOME/.claude/commands"
+KIND=commands
+SCOPE=global
+PROJDIR=''
 COPY=0; FORCE=0; LIST=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --global) DEST="$HOME/.claude/commands"; shift ;;
-    --project) DEST="${2:-}/.claude/commands"; shift 2 ;;
+    --global) SCOPE=global; shift ;;
+    --project) SCOPE=project; PROJDIR="${2:-}"; shift 2 ;;
+    --agents) KIND=agents; shift ;;
+    --commands) KIND=commands; shift ;;
     --copy) COPY=1; shift ;;
     --force) FORCE=1; shift ;;
     --list) LIST=1; shift ;;
@@ -33,6 +37,15 @@ while [ $# -gt 0 ]; do
     *) die "unexpected arg: $1" ;;
   esac
 done
+
+SRC="$REPO_ROOT/$KIND"
+[ -d "$SRC" ] || die "no $KIND/ dir in repo"
+if [ "$SCOPE" = project ]; then
+  [ -n "$PROJDIR" ] || die "--project needs a directory"
+  DEST="$PROJDIR/.claude/$KIND"
+else
+  DEST="$HOME/.claude/$KIND"
+fi
 
 [ "$LIST" -eq 1 ] || mkdir -p "$DEST"
 printf 'mc-commands: target %s\n' "$DEST"
@@ -65,4 +78,4 @@ for f in "$SRC"/*.md; do
 done
 
 [ "$LIST" -eq 1 ] && exit 0
-printf 'mc-commands: installed %d, skipped %d. Reload commands (restart Claude Code or /reload).\n' "$n_ok" "$n_skip"
+printf 'mc-commands: installed %d %s, skipped %d. Restart Claude Code (or /reload) to pick them up.\n' "$n_ok" "$KIND" "$n_skip"

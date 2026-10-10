@@ -4,10 +4,12 @@ Workspace-wide version of `/mc-setup`. Sweeps every project under a root, applie
 each, and performs the semantic de-dup on the ones that were seeded. Big operation — preview first.
 
 ## Usage
+
 `/mc-setup-all [root-dir]`  — root defaults to `~/Code`. Add `--inline`/`--import`/`--no-trim`
 to force choices, `--exclude <name>` to skip projects.
 
 ## Steps (the agent performs these)
+
 1. **Preview:** run `bin/mc-apply-all.sh <root>` (dry-run). Show the table (state + plan per
    project) and the `new=/existing=/managed=` tally. Confirm with the user before changing files
    — this touches many repos.
@@ -20,6 +22,7 @@ to force choices, `--exclude <name>` to skip projects.
    manual attention.
 
 ## Safety
+
 - Default is preview/dry-run; nothing changes until the user confirms `--apply`.
 - Every modified file is backed up to `*.mc-bak`; the shared core is never touched.
 - Skips known non-project working dirs and Master-Claude itself by default.

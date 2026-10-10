@@ -17,6 +17,7 @@ folder holds only skills that are specific to the Master-Claude system itself, o
 cross-project skills distilled from the corpus that are not yet global.
 
 ## Candidates to promote here later
+
 - A `sprint-lifecycle` skill composing `/sprint-start` -> work -> `/sprint-complete`.
 - A `retrofit-project` skill wrapping `mc-retrofit` (dry-run) -> review -> `mc-install`.
 

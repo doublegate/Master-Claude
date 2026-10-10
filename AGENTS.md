@@ -38,12 +38,20 @@ and keep that knowledge in sync inside any project. See `README.md` and `docs/00
 
 ## Build / verify
 
-- Shell lint: `shellcheck bin/*.sh test/run.sh`
+- Shell lint: `shellcheck --severity=warning bin/*.sh guards/*.sh test/*.sh`
+- Markdown lint: `npx markdownlint-cli2@0.23.1 "**/*.md"` (config + per-rule rationale in
+  `.markdownlint.json`; pin the version — an unpinned newer linter reports ungated rules).
 - Self-tests: `sh test/run.sh` (sandboxed: install/symlinks/idempotency/seed/trim/state/
-  retrofit-safety/self-guard). CI (`.github/workflows/ci.yml`) runs lint + tests + the
+  retrofit-safety/self-guard, plus the guard behavior groups 13-20). CI
+  (`.github/workflows/ci.yml`) runs shell lint + workflow lint + markdown lint + tests + the
   <200-line curation guard on every push.
-- Slash commands live in `commands/`; register with `bin/mc-commands.sh --global` so they
-  resolve (Claude Code only scans `~/.claude/commands`, not this repo's `commands/`).
+- Slash commands live in `commands/`, subagents in `agents/`; register with
+  `bin/mc-commands.sh --global` and `bin/mc-commands.sh --agents` so they resolve (Claude Code
+  only scans `~/.claude/commands` and `~/.claude/agents`, not this repo).
+- Enforcement layer: `bin/mc-guard.sh verify` (installed and intact?) and
+  `bin/mc-guard.sh audit` (read-only permission-surface audit across the workspace).
+  **Test guards against a live session, not only the sandbox** — hand-built hook payloads
+  pass an explicit `cwd` and miss how commands are really written (`cd repo && git ...`).
 
 See `docs/architecture/distribution-model.md` for the install mechanism and the
 `--inline` vs `--import` modes.

@@ -7,7 +7,7 @@ How the shared core reaches a project and stays in sync.
 Per project, one canonical file holds the instructions: **`AGENTS.md`**. The other two agent
 filenames are symlinks to it:
 
-```
+```text
 project/
   AGENTS.md            # canonical (slim, <200 lines)
   CLAUDE.md  -> AGENTS.md
@@ -27,7 +27,7 @@ project's `AGENTS.md` references the shared modules from there.
 
 ## The generated `AGENTS.md`
 
-```
+```text
 AGENTS.base.md  (universal, always-inline)
       +
 lang/<rust|python|typescript|generic>.md   (concrete commands)

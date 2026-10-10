@@ -94,5 +94,10 @@ checkn "mem-bridge dry-run wrote nothing" test -f "$BH/master-memory.md"
 "$BIN/mc-mem-bridge.sh" --only codex --codex-home "$BH" --execute >/dev/null 2>&1 || true
 check "mem-bridge --execute writes digest" test -f "$BH/master-memory.md"
 
+# --- 13-20. guards regression suite -----------------------------------------
+GUARDS="$REPO/guards"
+export GB="$GUARDS/guard-bash.sh"
+. "$REPO/test/guard-tests.sh"
+
 if [ "$FAILS" -eq 0 ]; then printf '\nALL PASS\n'; else printf '\n%d FAILED\n' "$FAILS"; fi
 [ "$FAILS" -eq 0 ]

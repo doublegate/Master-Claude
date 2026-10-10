@@ -5,9 +5,11 @@ the block still contains rules that the shared core already covers. The installe
 flag can only pattern-match; this command does the real (semantic) judgment.
 
 ## Usage
+
 `/mc-curate [project-dir]`  — defaults to the current project.
 
 ## Steps
+
 1. Read the project's `AGENTS.md` block (between the `MC-PROJECT` markers) and the shared core
    it imports/inlines (`~/.claude/master-core/AGENTS.base.md` + `modules/*` + `lang/<lang>.md`).
 2. For each line/rule in the block, decide:

@@ -8,6 +8,14 @@ sandbox/
 # Backups created by mc-install/mc-retrofit when replacing existing files
 *.mc-bak
 
+# Atomic-write staging files (mc-guard writes <settings>.mc-tmp, then mv's it into place;
+# a crashed run can leave one behind)
+*.mc-tmp
+
+# Merge/patch conflict leftovers
+*.orig
+*.rej
+
 # Node / Python artifacts (in case tooling tests pull anything)
 node_modules/
 __pycache__/
@@ -28,3 +36,13 @@ dist/
 
 # Personal, never shared
 CLAUDE.local.md
+
+# Per-user Claude Code permission grants. .claude/settings.json is shareable and may be
+# committed; settings.local.json records one machine's "yes, don't ask again" answers and
+# must not be. The enforcement layer's own rules live in guards/, not here.
+.claude/settings.local.json
+
+# Local security-guidance overrides (the shared rules are guards/claude-security-guidance.md
+# and guards/security-patterns.json; these are the gitignored personal variants)
+.claude/claude-security-guidance.local.md
+.claude/security-patterns.local.*

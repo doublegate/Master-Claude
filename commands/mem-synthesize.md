@@ -5,9 +5,11 @@ into the shared `memory-core/`. The deterministic scan is `bin/mc-mem-scan.sh`; 
 adds the judgment and the promotion.
 
 ## Usage
+
 `/mem-synthesize [--min-projects N]`  — default N=2.
 
 ## Steps (the agent performs these)
+
 1. Run `bin/mc-mem-scan.sh` (pass `--min-projects` through). It lists two candidate sets:
    **(A)** the same fact slug present in ≥N projects, and **(B)** facts already marked
    `scope: universal` — both filtered to those not yet in `memory-core/`.

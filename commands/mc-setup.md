@@ -4,10 +4,12 @@ The single entry point. Detects whether the project is new, existing, or already
 everything safe and necessary, and performs the semantic follow-up itself. You type one thing.
 
 ## Usage
+
 `/mc-setup [project-dir]`  — defaults to the current project. Add `--inline` / `--import` /
 `--no-trim` to override the auto choices; add `--dry-run` to preview only.
 
 ## Steps (the agent performs these automatically)
+
 1. Run `bin/mc-apply.sh <project-dir>` (pass through any flags). It will:
    - detect state (new / existing-unmanaged / already-managed),
    - pick `--inline` if `.codex`/`.gemini` are present, else `--import`,
@@ -26,6 +28,7 @@ everything safe and necessary, and performs the semantic follow-up itself. You t
    final `AGENTS.md` line count. Do not commit unless asked.
 
 ## Safety
+
 Everything `mc-apply` calls backs up existing files to `*.mc-bak`, is idempotent, and never
 touches the shared core. Use `--dry-run` first if you want a preview. See
 `docs/architecture/distribution-model.md`.

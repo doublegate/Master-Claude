@@ -10,6 +10,7 @@ Mine the corpus, write curated docs + distributable modules. **Status: COMPLETE.
 - [x] `templates/project-block.md` + `templates/CLAUDE.local.md`.
 
 ## Carryover / refinement (optional)
+
 - [x] Completeness-critic pass: re-read all 10 modules together; remove cross-module
       duplication. Findings: profile-first is already canonical to module 30 only (the original
       30/50 example was stale). Made module 20's *Golden vectors* and *Exactness honesty* rules

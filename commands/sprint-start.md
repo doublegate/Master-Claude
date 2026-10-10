@@ -4,9 +4,11 @@ Project-agnostic. Scaffolds a sprint with a plan, task checklist, and working di
 from the recurring sprint-lifecycle workflow across projects.
 
 ## Usage
+
 `/sprint-start <sprint-id>`  — id is `<phase>.<sprint>` (e.g. `4.3`) or descriptive (`auth-hardening`).
 
 ## Steps
+
 1. Validate the id format; refuse if a sprint dir with that id already exists.
 2. Create `to-dos/<sprint-id>/` with: `plan.md` (goal, scope, non-goals), `tasks.md` (3-8 tasks
    with a critical-path note + what can run in parallel), and `notes.md` (running log).

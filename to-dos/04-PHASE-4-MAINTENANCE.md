@@ -3,6 +3,7 @@
 Keep the system alive and improve it. **Status: ONGOING.**
 
 ## The keep-it-alive loop
+
 - [ ] When a lesson generalizes (hits a 2nd project), run `/mem-promote` to lift it to
       `memory-core/`, then curate.
 - [ ] When a `master-core/` module changes, run `bin/mc-sync.sh` on installed projects (or a
@@ -13,6 +14,7 @@ Keep the system alive and improve it. **Status: ONGOING.**
 - [ ] Keep every module/doc < ~200 lines (the curation rule); split if they grow.
 
 ## Enhancements backlog (recommendations) — DONE
+
 - [x] **`/mem-synthesize`** — `commands/mem-synthesize.md` + `bin/mc-mem-scan.sh` surface
       cross-project promotion candidates (recurring slugs + `scope: universal`) for review.
 - [x] **`mc-doctor` as a pre-commit / CI check** — `bin/mc-selfcheck.sh` runs in CI (self-host
@@ -26,11 +28,13 @@ Keep the system alive and improve it. **Status: ONGOING.**
 - [x] **Self-host CI** — `bin/mc-selfcheck.sh` validates symlinks/sizes/VERSION/frontmatter in CI.
 
 ## Decided (Phase-1 carryover)
+
 - Keep concise illustrative examples in modules (don't strip further); use `--modules` for
   size-sensitive installs. Aggressive stripping trades clarity/adherence for marginal context
   savings the modules don't need (all are well under 200 lines).
 
 ## Decision log
+
 - Distribution: installer + symlinks + `@import` (chosen with user).
 - Existing files: additive only this effort; retrofit is dry-run until explicitly applied.
 - Agents: all three, Claude-primary.
