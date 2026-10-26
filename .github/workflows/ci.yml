@@ -29,7 +29,7 @@ jobs:
         # gate never agreed to, so an unpinned runner turns an unrelated release into a red
         # build. Rule selection (what is enforced vs disabled by design) lives in
         # .markdownlint.json with the rationale for each exemption.
-        run: npx --yes markdownlint-cli2@0.23.1 "**/*.md"
+        run: npx --yes markdownlint-cli2@0.24.0 "**/*.md"
 
       - name: Self-tests
         run: sh test/run.sh
