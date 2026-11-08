@@ -22,12 +22,20 @@ Verdicts: safe_to_install -> pass. DO_NOT_INSTALL -> deny. Anything else (CAUTIO
 partial coverage, LLM pass missing, scan error) -> ask; Codex has no `ask`, so deny.
 Results are cached by content hash. `approve` records a content hash a human accepted;
 agent tool calls that try to approve, or touch the approvals file or the verdict cache, are
-denied. `ln` into a skills dir asks: a link follows its source, so no scan binds to it.
+denied, including a read command whose output is redirected. `ln` into a skills dir asks:
+a link follows its source, so no scan binds to it. Also asked rather than passed: an
+install whose path the shell expands (glob, variable, substitution) while anything in the
+chain names a skills dir or agent home, and an install chained with any step other than
+cd/mkdir/ls/pwd/test, since those steps run after the scan.
 
-Known gap: for git and `skills add` installs the gate scans its own clone, and the agent's
-command fetches again afterwards, so a remote that serves different content per request
-can install bytes the gate never saw. Closing it needs a post-install check that hashes
-the installed tree against the scanned digest.
+Known gaps. This is a policy guard over the command TEXT, not a sandbox: an agent set on
+evading it (an interpreter writing a file under an assembled name) can still reach the
+protected files; only an approvals store the agent's user cannot write (root-owned, or
+signed with a key it cannot read) would close that. For git and `skills add` installs the
+gate scans its own clone and the agent's command fetches again, so a remote serving
+different content per request can install bytes the gate never saw; closing it needs a
+post-install hash of the installed tree against the scanned digest, or the gate copying
+the scanned tree into place itself.
 """
 
 from __future__ import annotations
@@ -224,6 +232,19 @@ def expand(path: str, cwd: Path) -> Path:
     return q if q.is_absolute() else (cwd / q)
 
 
+def opaque(raw: str, expanded: Path) -> bool:
+    """True when the shell, not this parser, decides where `raw` points: a glob, a brace
+    or command substitution, or a variable the hook's environment could not expand (for
+    example one assigned earlier in the same chain)."""
+    return bool(re.search(r"[*?\[{`]|\$\(", raw)) or "$" in str(expanded)
+
+
+# Steps that cannot change a scanned source, a git config or a remote, so they may
+# precede an install in one chain without forcing a re-ask.
+BENIGN_IN_CHAIN = {"cd", "mkdir", "ls", "pwd", "true", "test", "["}
+INSTALL_CMDS = {"git", "cp", "mv", "rsync", "ln", "install", "unzip", "tar", "bsdtar"}
+
+
 def in_skills_dir(path: Path) -> bool:
     parts = Path(os.path.normpath(path)).parts
     for i, part in enumerate(parts):
@@ -275,31 +296,58 @@ def detect(command: str, cwd: Path) -> tuple[list[dict], str | None]:
     if not any(k in command for k in KEYWORDS):
         return [], None
     targets: list[dict] = []
+    # True when anything in the chain names a skills dir or an agent home, so a
+    # destination the shell will expand (glob, variable, substitution) may land there.
+    near = mentions_skills(command) or any(h in command for h in AGENT_HOMES)
+    others: list[str] = []
     for sub in split_chain(command):
         argv = strip_wrappers(words(sub))
         if not argv:
             continue
+        before = len(targets)
         try:
-            cwd, tamper = _detect_one(argv, cwd, targets)
+            cwd, tamper = _detect_one(argv, cwd, targets, near)
         except Exception:  # noqa: BLE001 -- unparseable input fails closed below
             if mentions_skills(sub):
                 targets.append({"kind": "unparsed", "source": sub.strip()})
             continue
         if tamper:
             return [], tamper
+        if len(targets) == before and os.path.basename(argv[0]) not in BENIGN_IN_CHAIN:
+            others.append(sub.strip())
+    # The gate scans before the whole chain runs, so any other step can change a source,
+    # a git config or a remote after the scan. Ask rather than pass on a stale verdict.
+    if targets and others:
+        targets.append(
+            {
+                "kind": "chained",
+                "source": "; ".join(others)[:200],
+            }
+        )
     return targets, None
 
 
 def _detect_one(
-    argv: list[str], cwd: Path, targets: list[dict]
+    argv: list[str], cwd: Path, targets: list[dict], near: bool = False
 ) -> tuple[Path, str | None]:
     """Parse one sub-command; append any install targets. Returns (cwd, tamper)."""
     cmd, args = os.path.basename(argv[0]), argv[1:]
     joined = " ".join(argv)
-    if "skillspector-gate" in joined and "approve" in args:
+    # Substring, not an argv match: a pty wrapper (`script -qc "... approve ..."`)
+    # carries the whole call in one argument and also supplies the tty approve wants.
+    if "skillspector-gate" in joined and re.search(r"\bapprove\b", joined):
         return cwd, "approving a SkillSpector gate verdict is reserved for the human"
+    # Reading a protected file is fine; a redirect makes any command a writer.
+    reads = (
+        cmd in ("cat", "less", "jq") or (cmd == "rtk" and args[:1] == ["read"])
+    ) and (not any(">" in a for a in args))
+    # Command substitution is split across tokens by shlex, so no single token shows it;
+    # in an install command near a skills dir, the shell decides the path, not us.
+    if near and cmd in INSTALL_CMDS and re.search(r"\$\(|`", joined):
+        targets.append({"kind": "unparsed", "source": joined})
+        return cwd, None
     for name in PROTECTED_NAMES:
-        if name in joined and cmd not in ("cat", "less", "jq", "rtk"):
+        if name in joined and not reads:
             reason = (
                 f"{name} is maintained by the SkillSpector gate itself; only the gate "
                 "and `skillspector-gate approve` may write it"
@@ -320,6 +368,9 @@ def _detect_one(
             return cwd, None
         url = pos[0]
         dest = expand(pos[1], cwd) if len(pos) > 1 else cwd / repo_basename(url)
+        if near and len(pos) > 1 and opaque(pos[1], dest):
+            targets.append({"kind": "unparsed", "source": joined})
+            return cwd, None
         if in_skills_dir(dest):
             ref = opt_value(rest, "-b") or opt_value(rest, "--branch")
             targets.append({"kind": "git", "source": url, "ref": ref})
@@ -329,10 +380,17 @@ def _detect_one(
         )
         tdir = opt_value(args, "-t") or opt_value(args, "--target-directory")
         if tdir:
-            dest, srcs = expand(tdir, cwd), pos
+            raw_dest, srcs = tdir, pos
         elif len(pos) >= 2:
-            dest, srcs = expand(pos[-1], cwd), pos[:-1]
+            raw_dest, srcs = pos[-1], pos[:-1]
         else:
+            return cwd, None
+        dest = expand(raw_dest, cwd)
+        if near and (
+            opaque(raw_dest, dest)
+            or (in_skills_dir(dest) and any(opaque(s, expand(s, cwd)) for s in srcs))
+        ):
+            targets.append({"kind": "unparsed", "source": joined})
             return cwd, None
         if in_skills_dir(dest):
             for s in srcs:
@@ -348,6 +406,9 @@ def _detect_one(
         pos = positionals(args, {"-d", "-x", "-P"})
         d = opt_value(args, "-d")
         dest = expand(d, cwd) if d else cwd
+        if near and d and opaque(d, dest):
+            targets.append({"kind": "unparsed", "source": joined})
+            return cwd, None
         if pos and in_skills_dir(dest):
             targets.append({"kind": "path", "source": str(expand(pos[0], cwd))})
     elif cmd in ("tar", "bsdtar"):
@@ -358,6 +419,9 @@ def _detect_one(
             return cwd, None
         d = opt_value(args, "-C") or opt_value(args, "--directory")
         dest = expand(d, cwd) if d else cwd
+        if near and d and opaque(d, dest):
+            targets.append({"kind": "unparsed", "source": joined})
+            return cwd, None
         archive = None
         for i, a in enumerate(args):
             if a in ("-f", "--file") or (
@@ -631,6 +695,14 @@ def evaluate(targets: list[dict], deadline: float) -> tuple[str, str]:
                 notes.append(
                     f"'{t['source']}' touches a skills directory but could not be parsed, "
                     "so the gate cannot tell what it installs"
+                )
+                continue
+            if t["kind"] == "chained":
+                worst = max_dec(worst, "ask")
+                notes.append(
+                    f"the install is chained with other steps ({t['source']}), which run "
+                    "after the scan and could change what is installed; run the install "
+                    "on its own"
                 )
                 continue
             if t["kind"] == "link":

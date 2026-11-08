@@ -104,6 +104,53 @@ class Detect(unittest.TestCase):
         self.assertIsNotNone(kinds(f"cp /tmp/forged.json {cache}")[1])
         self.assertIsNone(kinds(f"cat {cache}")[1])
 
+    def test_a_read_command_with_a_redirect_is_a_writer(self):
+        # Regression (commit review 2026-11-08): cat/jq were exempt from the tamper check
+        # outright, so redirecting their output into a protected file forged a verdict.
+        for target in (
+            "~/.config/skillspector/gate-approvals.json",
+            "~/.cache/skillspector-gate/verdicts.json",
+        ):
+            with self.subTest(target=target):
+                self.assertIsNotNone(kinds(f"cat /tmp/forged.json > {target}")[1])
+                self.assertIsNotNone(kinds(f"jq . /tmp/f.json >{target}")[1])
+                self.assertIsNone(kinds(f"cat {target}")[1])
+
+    def test_approve_through_a_pty_wrapper_is_refused(self):
+        # Regression: `script` carries the call in one argument and supplies a tty.
+        self.assertIsNotNone(
+            kinds('script -qc "skillspector-gate approve ./x" /dev/null')[1]
+        )
+        self.assertIsNotNone(kinds("python3 guards/skillspector-gate.py approve x")[1])
+
+    def test_a_destination_the_shell_expands_is_not_trusted(self):
+        # Regression: the gate read globs and variables literally while the shell
+        # expanded them into a skills dir.
+        for cmd in (
+            "cp -r /tmp/s ~/.claude/sk*ls/s",
+            "D=~/.claude/skills; cp -r /tmp/s $D",
+            "cp -r /tmp/s $(echo ~/.claude/skills)",
+            "cp -r /tmp/s* ~/.claude/skills/",
+        ):
+            with self.subTest(cmd=cmd):
+                got, _ = kinds(cmd)
+                self.assertIn("unparsed", [k for k, _, _ in got])
+        # No skills dir or agent home anywhere in the chain: an ordinary glob copy.
+        self.assertEqual(kinds("cp /tmp/*.txt /tmp/out/")[0], [])
+
+    def test_an_install_chained_with_other_steps_asks(self):
+        # Regression: the scan runs before the chain, so an earlier step can rewrite the
+        # source after it was scanned.
+        got, _ = kinds("echo x >> /tmp/s/SKILL.md; cp -r /tmp/s ~/.claude/skills/s")
+        self.assertIn("chained", [k for k, _, _ in got])
+        got, _ = kinds("mkdir -p ~/.claude/skills && cp -r /tmp/s ~/.claude/skills/s")
+        self.assertNotIn("chained", [k for k, _, _ in got])
+        decision, _ = gate.evaluate(
+            [{"kind": "chained", "source": "echo x >> /tmp/s/SKILL.md"}],
+            time.time() + 900,
+        )
+        self.assertEqual(decision, "ask")
+
     def test_linking_a_skill_in_is_not_passed_on_a_scan(self):
         got, _ = kinds("ln -s /tmp/src/myskill ~/.claude/skills/myskill")
         self.assertEqual(got, [("link", "/tmp/src/myskill", None)])

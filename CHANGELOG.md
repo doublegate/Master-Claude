@@ -19,8 +19,13 @@ All notable changes to this project are documented here. The format is based on
   default. Covered by `test/test_skillspector_gate.py`, now a CI step. The verdict cache is
   protected like the approvals file (Bash gate and `guard-write.sh`), since a forged cached
   `safe_to_install` passes without a rescan; `ln` into a skills dir asks, because a link follows
-  its source after the scan. Known gap: git and `skills add` installs re-fetch after the scan, so
-  a remote serving different content per request is not yet caught.
+  its source after the scan. A redirected read (`cat x > <protected file>`) and an approve call
+  wrapped in a pty (`script -qc`) are refused, and an install whose path the shell expands near a
+  skills dir, or that is chained with steps other than cd/mkdir/ls/pwd/test, asks rather than
+  passes. Known gaps: the gate matches command text, so it is a policy guard rather than a
+  sandbox (a root-owned or signed approvals store would close that), and git and `skills add`
+  installs re-fetch after the scan, so a remote serving different content per request is not
+  yet caught.
 - **Enforcement layer (Phase 5)** — `guards/` + `bin/mc-guard.sh`. Master-Claude previously
   distributed only instructions, which a model may or may not follow. These are enforced by the
   harness itself: a `permissions.deny` rule set plus `PreToolUse` hooks that block destructive
