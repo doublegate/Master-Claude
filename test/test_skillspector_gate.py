@@ -8,6 +8,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -94,6 +95,25 @@ class Detect(unittest.TestCase):
             kinds("echo {} > ~/.config/skillspector/gate-approvals.json")[1]
         )
         self.assertIsNone(kinds("skillspector-gate check ./x")[1])
+
+    def test_agent_cannot_forge_a_cached_verdict(self):
+        # Regression (security review 2026-11-08): a cached safe_to_install passes a skill
+        # without a rescan, so writing the cache forged a pass that approvals did not.
+        cache = "~/.cache/skillspector-gate/verdicts.json"
+        self.assertIsNotNone(kinds(f"echo '{{}}' > {cache}")[1])
+        self.assertIsNotNone(kinds(f"cp /tmp/forged.json {cache}")[1])
+        self.assertIsNone(kinds(f"cat {cache}")[1])
+
+    def test_linking_a_skill_in_is_not_passed_on_a_scan(self):
+        got, _ = kinds("ln -s /tmp/src/myskill ~/.claude/skills/myskill")
+        self.assertEqual(got, [("link", "/tmp/src/myskill", None)])
+        got, _ = kinds("cp -r /tmp/src/myskill ~/.claude/skills/myskill")
+        self.assertEqual(got, [("path", "/tmp/src/myskill", None)])
+        decision, reason = gate.evaluate(
+            [{"kind": "link", "source": "/tmp/src/myskill"}], time.time() + 900
+        )
+        self.assertEqual(decision, "ask")
+        self.assertIn("cp -r", reason)
 
     def test_dangling_option_does_not_hide_an_install(self):
         # Regression (security review 2026-11-07): a trailing option with no value

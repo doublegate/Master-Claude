@@ -43,6 +43,8 @@ check_path() {
       guard_deny "Blocked: write to a system path ($FILE). System configuration changes belong to the user, who can apply them with the privileges this session does not have." ;;
     */.claude/settings.json|*/.claude/settings.local.json)
       guard_deny "Blocked: write to a Claude Code settings file ($FILE). Settings hold the permission and hook rules that constrain this session; an agent must not rewrite them mid-session. Use bin/mc-guard.sh for guard configuration, or ask the user to edit the file." ;;
+    */gate-approvals.json|*/skillspector-gate/verdicts.json)
+      guard_deny "Blocked: write to a SkillSpector gate verdict file ($FILE). Its contents decide which skills install without a scan; only the gate and a human running 'skillspector-gate approve' may write it." ;;
     *.env|*.env.*)
       guard_deny "Blocked: write to an environment/secrets file ($FILE). Per master-core module 60, secrets are supplied by the user via the environment and never written by an agent." ;;
   esac

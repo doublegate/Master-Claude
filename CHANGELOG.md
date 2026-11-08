@@ -16,7 +16,11 @@ All notable changes to this project are documented here. The format is based on
   cached by content hash, and `approve` records a human-accepted hash that agent tool calls cannot
   write. `mc-guard.sh install|verify|uninstall` now registers it in `~/.claude/settings.json` with a
   900 s timeout, because an LLM-backed scan runs about a minute per skill against the 60 s hook
-  default. Covered by `test/test_skillspector_gate.py`, now a CI step.
+  default. Covered by `test/test_skillspector_gate.py`, now a CI step. The verdict cache is
+  protected like the approvals file (Bash gate and `guard-write.sh`), since a forged cached
+  `safe_to_install` passes without a rescan; `ln` into a skills dir asks, because a link follows
+  its source after the scan. Known gap: git and `skills add` installs re-fetch after the scan, so
+  a remote serving different content per request is not yet caught.
 - **Enforcement layer (Phase 5)** — `guards/` + `bin/mc-guard.sh`. Master-Claude previously
   distributed only instructions, which a model may or may not follow. These are enforced by the
   harness itself: a `permissions.deny` rule set plus `PreToolUse` hooks that block destructive

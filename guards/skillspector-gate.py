@@ -21,7 +21,13 @@ skill bundle, so SkillSpector cannot scan them and this gate does not cover them
 Verdicts: safe_to_install -> pass. DO_NOT_INSTALL -> deny. Anything else (CAUTION,
 partial coverage, LLM pass missing, scan error) -> ask; Codex has no `ask`, so deny.
 Results are cached by content hash. `approve` records a content hash a human accepted;
-agent tool calls that try to approve, or touch the approvals file, are denied.
+agent tool calls that try to approve, or touch the approvals file or the verdict cache, are
+denied. `ln` into a skills dir asks: a link follows its source, so no scan binds to it.
+
+Known gap: for git and `skills add` installs the gate scans its own clone, and the agent's
+command fetches again afterwards, so a remote that serves different content per request
+can install bytes the gate never saw. Closing it needs a post-install check that hashes
+the installed tree against the scanned digest.
 """
 
 from __future__ import annotations
@@ -96,7 +102,12 @@ KEYWORDS = (
     "skills",
     "skillspector-gate",
     APPROVALS_NAME,
+    CACHE_FILE.name,
 )
+# Files whose contents decide a verdict. A cached safe_to_install passes a skill without a
+# rescan, so the verdict cache needs the same protection as the approvals file: writing
+# either one forges a pass.
+PROTECTED_NAMES = (APPROVALS_NAME, CACHE_FILE.name)
 GIT_OPTS_WITH_VALUE = {
     "-b",
     "--branch",
@@ -287,11 +298,13 @@ def _detect_one(
     joined = " ".join(argv)
     if "skillspector-gate" in joined and "approve" in args:
         return cwd, "approving a SkillSpector gate verdict is reserved for the human"
-    if APPROVALS_NAME in joined and cmd not in ("cat", "less", "jq", "rtk"):
-        return (
-            cwd,
-            f"{APPROVALS_NAME} is maintained by `skillspector-gate approve` only",
-        )
+    for name in PROTECTED_NAMES:
+        if name in joined and cmd not in ("cat", "less", "jq", "rtk"):
+            reason = (
+                f"{name} is maintained by the SkillSpector gate itself; only the gate "
+                "and `skillspector-gate approve` may write it"
+            )
+            return cwd, reason
     if cmd == "cd":
         return (expand(args[0], cwd) if args else HOME), None
     if cmd == "git":
@@ -327,7 +340,10 @@ def _detect_one(
                 if not in_skills_dir(
                     sp
                 ):  # already-installed skills were gated on entry
-                    targets.append({"kind": "path", "source": str(sp)})
+                    # A link keeps following its source, so whatever is scanned now can
+                    # be edited after it passes; no verdict can bind to what will run.
+                    kind = "link" if cmd == "ln" else "path"
+                    targets.append({"kind": kind, "source": str(sp)})
     elif cmd == "unzip":
         pos = positionals(args, {"-d", "-x", "-P"})
         d = opt_value(args, "-d")
@@ -615,6 +631,13 @@ def evaluate(targets: list[dict], deadline: float) -> tuple[str, str]:
                 notes.append(
                     f"'{t['source']}' touches a skills directory but could not be parsed, "
                     "so the gate cannot tell what it installs"
+                )
+                continue
+            if t["kind"] == "link":
+                worst = max_dec(worst, "ask")
+                notes.append(
+                    f"{t['source']}: a linked skill keeps following its source, so a scan "
+                    "cannot cover what will actually run; copy it (cp -r) instead"
                 )
                 continue
             scratch = Path(tmp) / str(n)
