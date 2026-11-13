@@ -1209,29 +1209,43 @@ def skills_dirs(cwd: Path) -> list[Path]:
     return out
 
 
+def _touched(d: Path, since: float) -> bool:
+    """True when the dir, or any file under it, was modified no earlier than the scan."""
+    cutoff = since - 5
+    try:
+        if d.stat().st_mtime >= cutoff:
+            return True
+        return any(f.stat().st_mtime >= cutoff for f in d.rglob("*") if f.is_file())
+    except OSError:
+        return True  # cannot tell: check it rather than skip it
+
+
 def locate(
     item: dict, cwd: Path, since: float, before: set[str] | None = None
-) -> tuple[Path | None, Path | None]:
-    """(installed skill dir, install root to quarantine) for one scanned skill."""
+) -> list[tuple[Path, Path]]:
+    """Every (installed skill dir, install root to quarantine) this install produced for
+    one scanned skill; empty when none can be found."""
     if item["kind"] == "git" and item.get("dest"):
         root = Path(item["dest"])
         skill = root / item["rel"] if item["rel"] else root
-        return (skill, root) if skill.exists() else (None, None)
-    # `skills add` picks its own destination: find the skill by name, newest first,
-    # new since the pre-install snapshot or modified no earlier than the scan.
-    name, found = item["name"], []
+        return [(skill, root)] if skill.exists() else []
+    # `skills add` picks its own destinations, possibly several (HOME and the project,
+    # several agents, symlink aliases): every copy by that name that is new since the
+    # pre-install snapshot or was modified since the scan is checked, one per real path.
+    name, found, real = item["name"], [], set()
     for sd in skills_dirs(cwd):
-        for d in sd.iterdir():
-            if not d.is_dir():
+        for d in sorted(sd.iterdir()):
+            if not d.is_dir() or not (d.name == name or skill_name(d) == name):
                 continue
-            if d.name == name or skill_name(d) == name:
-                mt = d.stat().st_mtime
-                if mt >= since - 5 or (before is not None and str(d) not in before):
-                    found.append((mt, d))
-    if not found:
-        return None, None
-    d = max(found)[1]
-    return d, d
+            new = before is not None and str(d) not in before
+            if not (new or _touched(d, since)):
+                continue
+            key = os.path.realpath(d)
+            if key in real:
+                continue
+            real.add(key)
+            found.append((d, d))
+    return found
 
 
 def quarantine(path: Path) -> Path:
@@ -1329,19 +1343,24 @@ def post(agent: str) -> int:
         label = item["source"] + (f" :: {item['name']}" if item.get("rel") else "")
         sources.append(label)
         try:
-            installed, root = locate(item, Path(item.get("cwd") or base), since, before)
+            copies = locate(item, Path(item.get("cwd") or base), since, before)
         except OSError:
-            installed, root = None, None
-        if installed is None or root is None:
+            copies = []
+        if not copies:
             unverified.append(label)
             continue
-        try:
-            got = tree_hash(installed)
-        except (GateError, OSError):
-            got = None
-        if got == item["digest"]:
-            continue
-        reject(label, root, "installed content differs from what was scanned")
+        for installed, root in copies:
+            try:
+                got = tree_hash(installed)
+            except (GateError, OSError):
+                got = None
+            if got != item["digest"]:
+                where = "" if len(copies) == 1 else f" ({installed})"
+                reject(
+                    label + where,
+                    root,
+                    "installed content differs from what was scanned",
+                )
     # `skills add`: a skill dir absent from the pre-install snapshot and not among the
     # scanned skills is an unscanned addition (quarantined, reported). Skills that another
     # pending gated install is expecting are left for that install's own check.

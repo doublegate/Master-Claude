@@ -27,7 +27,9 @@ All notable changes to this project are documented here. The format is based on
     installed. A `git clone` must match the whole scanned tree (minus `.git`), so a second
     fetch that adds a skill or changes any helper file fails, not only a changed scanned skill.
     A clone too large to hash whole must match the scanned skill inventory and each skill's
-    digest. A `skills add` skill is found by name in the agent skills dirs; the pre-install
+    digest. A `skills add` skill is found by name in the agent skills dirs, and every copy the
+    install produced (new since the snapshot or modified since the scan, one per real path) is
+    hashed, so a safe copy in one place never vouches for a changed one elsewhere; the pre-install
     hook snapshots those dirs, and any other skill dir that is new since the snapshot, was not
     scanned and is not expected by another pending gated install is quarantined too.
   - On a mismatch the install is moved to `~/.cache/skillspector-gate/quarantine/` (a
@@ -39,13 +41,14 @@ All notable changes to this project are documented here. The format is based on
   - `bin/mc-guard.sh` registers the post hook (`PostToolUse`, Bash, 120 s) on `install`,
     verifies it, and removes only that entry on `uninstall`, keeping foreign `PostToolUse`
     hooks.
-  - Tests: 23 new gate tests: match verified; git and `skills add` mismatches quarantined;
+  - Tests: 25 new gate tests: match verified; git and `skills add` mismatches quarantined;
     a clone with an added skill or a changed helper file quarantined; an unscanned extra skill
     from `skills add` quarantined while the scanned one and older skills stay; concurrent and
     id-less records paired correctly; legacy pending files read; an oversized clone keeps
     per-skill checks; recently touched existing skills and another pending install's skill are
     left alone; `cd … && skills add` checked in the target project; symlinked skills
-    quarantine their real content; overlapping pre-hooks keep every record; missing install unverified;
+    quarantine their real content; overlapping pre-hooks keep every record; every installed
+    copy verified while an old untouched copy is left alone; missing install unverified;
     denied and local installs record nothing; unrelated commands ignored; the pending file is
     protected. They also redirect `PENDING_FILE` and
     `QUARANTINE_DIR`, so no test touches the real cache. Guard tests cover registration,
