@@ -15,8 +15,8 @@ project/
 ```
 
 This is the accepted 2026 cross-tool convention: `AGENTS.md` is the Linux-Foundation-stewarded
-standard read by 28+ tools; Claude reads `CLAUDE.md`, Gemini reads `GEMINI.md`; all three hit
-the same bytes. Git tracks symlinks natively, so a clone/pull reproduces the setup with no
+standard read by 28+ tools; Claude reads `CLAUDE.md`; Antigravity CLI (`agy`) reads both
+`AGENTS.md` and `GEMINI.md` and de-duplicates the symlinked pair; all three hit the same bytes. Git tracks symlinks natively, so a clone/pull reproduces the setup with no
 extra steps.
 
 ## The shared core lives in `~/.claude/master-core/`
@@ -58,17 +58,34 @@ De-duplicating the seeded block against the core is two-tier:
 
 ## `--import` vs `--inline` (the `@import` nuance)
 
-`@import` is **Claude-specific** — Codex and Gemini do not expand it. Two install modes
-resolve this:
+`@import` is **Claude-specific**. Codex and Antigravity CLI (`agy`, verified 1.5.6) ignore
+every `@import` line, whatever the path form. The deprecated Gemini CLI processed imports but
+did not expand `~`. Two install modes resolve this:
 
 | Mode | What happens | Use when |
 |---|---|---|
 | `--import` (default) | Always-apply rules inline in `AGENTS.md`; heavy modules referenced as `@~/.claude/master-core/modules/*.md`. Slimmest file. | Claude is the primary/only agent on the project. |
-| `--inline` | Selected modules are baked into `AGENTS.md` so all three agents read identical content. Larger file. | Codex/Gemini are actively used on the project. |
+| `--inline` | Selected modules are baked into `AGENTS.md` so all three agents read identical content. Larger file. | Codex/Antigravity are actively used on the project. |
 
 Both keep the file as small as the goal allows; `--import` leans on Claude's loader, `--inline`
-trades size for tri-agent parity. `mc-doctor` warns if an `--import` project also has active
-`.codex`/`.gemini` usage (parity gap).
+trades size for tri-agent parity. `mc-doctor` warns about the parity gap when an `--import`
+project has `.codex/`, `.gemini/` or `.agents/` (Antigravity) directories, or when `agy` is
+installed on the machine.
+
+### Import paths are home-relative
+
+`mc-install` writes the import lines as `@~/.claude/master-core/...`, which Claude Code expands
+to the current user's home. A committed `AGENTS.md` therefore carries no username and works
+for every collaborator who has the core linked at `~/.claude/master-core`. Older installs wrote
+the expanded `$HOME` path (`@/Users/<name>/...`). That leaks the username into shared or public
+repositories, and it breaks on any other machine. `mc-sync` converts such files, and
+`mc-doctor` warns about them.
+
+`--absolute-imports` keeps the expanded path for the rare setup that needs it: the deprecated
+Gemini CLI's import processor does not expand `~`. It does not help Antigravity, which ignores
+imports altogether. The choice is recorded in the header
+stamp (`imports=absolute`), so `mc-sync` keeps it and `mc-doctor` accepts it. Keep such files
+out of shared repositories.
 
 ## Idempotency & safety
 
@@ -94,7 +111,8 @@ trades size for tri-agent parity. `mc-doctor` warns if an `--import` project als
 | `mc-selfcheck.sh` | Validate this repo's own invariants (CI self-host gate) |
 | `mc-promote.sh <dir> <slug> --date <d>` | Lift a project lesson into `memory-core/` |
 | `/mem-synthesize` · `mc-mem-scan.sh` | Surface cross-project memory-promotion candidates |
-| `mc-mem-bridge.sh [--execute]` | Digest `memory-core/` into the Codex/Gemini homes |
+| `mc-agy.sh install\|verify\|uninstall [--full\|--modules L] [--no-memory]` | Generate the `master-claude` agy plugin (`~/.gemini/config/plugins/master-claude/`), so Antigravity gets the core + memory digest globally (agy ignores `@imports`); `mc-sync` refreshes it |
+| `mc-mem-bridge.sh [--execute] [--only codex\|agy\|gemini]` | Digest `memory-core/` into `~/.codex/` (default) or another agent home |
 | `mc-retrofit.sh --dry-run <dir>` | Show what a migration would change (no writes) |
 | `mc-commands.sh [--global]` | Register the slash commands into `~/.claude/commands` |
 
@@ -106,5 +124,5 @@ trades size for tri-agent parity. `mc-doctor` warns if an `--import` project als
 | **existing** | real `CLAUDE.md`/`AGENTS.md`/`GEMINI.md` with content, no MC block | seed block + `--trim` | semantic `/mc-curate` de-dup |
 | **managed** | `AGENTS.md` already has the MC block | `mc-sync` (refresh core) | none |
 
-Mode is auto: `--inline` if `.codex`/`.gemini` are present in the project (tri-agent parity),
-else `--import`. Override with explicit flags.
+Mode is auto: `--inline` if `.codex/`, `.gemini/` or `.agents/` (Antigravity's workspace
+directory) is present in the project (tri-agent parity), else `--import`. Override with explicit flags.

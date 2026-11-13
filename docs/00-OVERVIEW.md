@@ -5,7 +5,8 @@
 Turn a year of fragmented, project-trapped AI-agent knowledge into **one curated, reusable
 system** that works regardless of which project it is applied to, and which makes that
 knowledge effortless to adopt in any new or existing codebase, for all three agents in use
-(Claude Code, OpenAI Codex, Google Gemini).
+(Claude Code, OpenAI Codex, Google Antigravity CLI `agy`, which replaced the deprecated
+Gemini CLI).
 
 ## The problem it solves
 
@@ -60,5 +61,5 @@ optimizes for **signal density**: short modules, deduplicated rules, decisions n
 - `01-KNOWLEDGE-TAXONOMY.md` — the 16 areas and where each came from.
 - `architecture/distribution-model.md` — how install/sync/symlink/@import work.
 - `architecture/memory-architecture.md` — memory schema v2 + promotion model.
-- `architecture/tri-agent-interop.md` — Claude/Codex/Gemini parity.
+- `architecture/tri-agent-interop.md` — Claude/Codex/Antigravity parity.
 - `../to-dos/` — the phased build plan.

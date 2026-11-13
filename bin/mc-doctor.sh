@@ -11,6 +11,7 @@ PROJECT="${1:-}"
 [ -d "$PROJECT" ] || { printf 'mc-doctor: not a directory: %s\n' "$PROJECT" >&2; exit 2; }
 PROJECT=$(CDPATH='' cd -- "$PROJECT" && pwd)
 
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 CORE_LINK="$HOME/.claude/master-core"
 fails=0
 warns=0
@@ -30,6 +31,13 @@ if [ -f "$AGENTS" ] && [ ! -L "$AGENTS" ]; then
   if grep -q '^@.*master-core/' "$AGENTS"; then MODE=import; else MODE=inline; fi
   if [ "$MODE" = import ] && [ "$LINES" -gt 200 ]; then warn "import-mode AGENTS.md is $LINES lines (>200)"
   else ok "AGENTS.md size $LINES lines (mode=$MODE)"; fi
+  if [ "$MODE" = import ]; then
+    if grep -q '^<!-- mc-core: .*imports=absolute' "$AGENTS"; then
+      ok "absolute @imports (requested with --absolute-imports; keep out of shared repos)"
+    elif grep -q '^@/.*master-core/' "$AGENTS"; then
+      warn "absolute @imports embed your home path (leaks the username if committed) — run mc-sync to switch to @~/"
+    else ok "home-relative @~/ imports"; fi
+  fi
 else
   fail "no canonical AGENTS.md"; MODE=none
 fi
@@ -61,10 +69,40 @@ if [ -f "$AGENTS" ]; then
   elif [ "${MODE:-none}" != none ]; then warn "no mc-core version stamp (re-install to add)"; fi
 fi
 
-# 4. tri-agent parity gap
+# Antigravity CLI present on this machine? (MC_AGY_INSTALLED=1 forces it, for tests)
+AGY=0
+if [ "${MC_AGY_INSTALLED:-}" = 1 ] || command -v agy >/dev/null 2>&1 || [ -d "$HOME/.gemini/antigravity-cli" ]; then AGY=1; fi
+
+# 3c. agy reads AGENTS.md/GEMINI.md but caps every rule file at 24,000 bytes (documented,
+# verified with agy 1.5.6): anything past that is silently cut, in any mode.
+if [ "$AGY" = 1 ] && [ -f "$AGENTS" ]; then
+  BYTES=$(wc -c < "$AGENTS" | tr -d ' ')
+  if [ "$BYTES" -gt 24000 ]; then
+    warn "AGENTS.md is $BYTES bytes: Antigravity CLI truncates rule files at 24,000 bytes, so agy never sees the last $((BYTES - 24000)) — slim the project block (/mc-curate) or switch an --inline install to --import"
+  else ok "AGENTS.md $BYTES bytes (within agy's 24,000-byte rule-file cap)"; fi
+fi
+
+# 4. tri-agent parity gap. Only Claude Code expands @imports: Codex and Antigravity CLI
+# (agy, verified 1.5.6) read AGENTS.md/GEMINI.md but ignore every @import line; the
+# deprecated Gemini CLI processes imports but cannot expand @~/. In import mode they all
+# see only the project block.
 if [ "${MODE:-none}" = import ]; then
   if [ -d "$PROJECT/.codex" ] || [ -d "$PROJECT/.gemini" ]; then
-    warn "import mode + .codex/.gemini present: Codex/Gemini miss @import modules — consider --inline"
+    warn "import mode + .codex/.gemini present: Codex/Gemini CLI miss the @import modules — consider --inline"
+  fi
+  # Antigravity CLI gets the core globally through the Master-Claude agy plugin that
+  # bin/mc-agy.sh maintains (agy ignores @imports, so per-project imports never reach it).
+  if [ "$AGY" = 1 ]; then
+    AGY_PLUGIN="${MC_AGY_PLUGIN_DIR:-$HOME/.gemini/config/plugins/master-claude}"
+    if "$SCRIPT_DIR/mc-agy.sh" verify -q; then
+      ok "Antigravity CLI gets the core globally (agy plugin current: $AGY_PLUGIN)"
+    else
+      warn "Antigravity CLI (agy) is installed but the Master-Claude agy plugin is missing or stale, so agy misses the @import modules here — run: $SCRIPT_DIR/mc-agy.sh install"
+    fi
+  elif [ -d "$PROJECT/.agents" ]; then
+    warn "import mode + .agents/ present but the Master-Claude agy plugin is not installed — run mc-agy.sh install"
+  elif command -v gemini >/dev/null 2>&1; then
+    warn "Gemini CLI (deprecated) installed: it cannot expand @~/ imports — use --inline if you run it here"
   fi
 fi
 

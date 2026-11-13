@@ -6,8 +6,8 @@
 ## What this is
 
 Master-Claude is the curated, **project-agnostic** synthesis of AI-agent knowledge built up
-across ~89 codebases in `~/Code/` (Claude Code, Codex, Gemini), plus the tooling to install
-and keep that knowledge in sync inside any project. See `README.md` and `docs/00-OVERVIEW.md`.
+across ~89 codebases in `~/Code/` (Claude Code, Codex, Antigravity CLI — formerly Gemini
+CLI), plus the tooling to install and keep that knowledge in sync inside any project. See `README.md` and `docs/00-OVERVIEW.md`.
 
 ## Layout
 

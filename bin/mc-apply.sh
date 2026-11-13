@@ -55,10 +55,16 @@ else
   done
 fi
 
-# --- pick mode (auto: inline if Codex/Gemini are active here, else import) --
+# --- pick mode (auto: inline if Codex/Gemini/Antigravity are active here, else import) --
+# Codex and Gemini CLI never see the @import modules, so .codex/.gemini projects need them
+# baked in. Antigravity (.agents/ is its workspace dir) also ignores imports, but when
+# the mc-agy.sh plugin is installed it already has every module globally; going
+# inline then would only load the core twice. So .agents/ forces inline only without that.
 if [ -n "$FORCE_MODE" ]; then
   MODE="$FORCE_MODE"
 elif [ -d "$PROJECT/.codex" ] || [ -d "$PROJECT/.gemini" ]; then
+  MODE="--inline"
+elif [ -d "$PROJECT/.agents" ] && ! "$SCRIPT_DIR/mc-agy.sh" verify -q; then
   MODE="--inline"
 else
   MODE="--import"

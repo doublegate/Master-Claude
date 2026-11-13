@@ -7,12 +7,18 @@
 #   mc-install.sh <project-dir> [--lang rust|python|typescript|generic]
 #                               [--inline|--import] [--core <path>] [--name <n>]
 #
-#   --import  (default) heavy modules referenced via @import (Claude expands them).
-#   --inline  bake modules into AGENTS.md (full Claude/Codex/Gemini parity).
+#   --import  (default) heavy modules referenced via @import (only Claude expands them).
+#   --inline  bake modules into AGENTS.md (full Claude/Codex/Antigravity parity; Codex and
+#             Antigravity CLI `agy` read AGENTS.md/GEMINI.md but ignore @import lines).
 #   --trim    when seeding a block from an existing file, HTML-comment lines that
 #             look like universal rules already in the core (lossless; review after).
 #   --modules <list>  comma-separated module number prefixes to include (e.g. 10,30,60);
 #             default = all. Slims --inline installs to only the relevant modules.
+#   --absolute-imports  write import lines as the expanded $HOME path instead of the
+#             default home-relative @~/.claude/master-core/... (Claude Code expands ~;
+#             only the deprecated Gemini CLI needs this; Antigravity ignores imports either
+#             way). Leaks the user's home path into AGENTS.md, so avoid it in shared/public
+#             repos. Recorded as "imports=absolute"; mc-sync keeps it.
 #
 set -eu
 
@@ -55,6 +61,12 @@ SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 CORE_SRC="$REPO_ROOT/master-core"
 CORE_LINK="$HOME/.claude/master-core"
+# What import lines reference. Home-relative by default, so a committed AGENTS.md
+# carries no username and works for every user who has the core linked at the
+# same place. The literal tilde is intended (it is written out, not expanded).
+# shellcheck disable=SC2088
+IMPORT_PREFIX='~/.claude/master-core'
+ABS_IMPORTS=0
 
 PROJECT=""
 LANG=""
@@ -72,7 +84,8 @@ while [ $# -gt 0 ]; do
     --modules) [ $# -gt 1 ] || die "--modules requires an argument"; MODULES="$2"; shift 2 ;;
     --core) CORE_SRC="${2:-}"; shift 2 ;;
     --name) NAME="${2:-}"; shift 2 ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    --absolute-imports) ABS_IMPORTS=1; shift ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
     -*) die "unknown flag: $1" ;;
     *) PROJECT="$1"; shift ;;
   esac
@@ -104,6 +117,8 @@ fi
 CORE_VERSION=$(cat "$CORE_SRC/VERSION" 2>/dev/null || echo unknown)
 MOD_NOTE=""
 if [ -n "$MODULES" ]; then MOD_NOTE=" | modules=$MODULES"; fi
+IMPORT_NOTE=""
+if [ "$ABS_IMPORTS" -eq 1 ]; then IMPORT_PREFIX="$CORE_LINK"; IMPORT_NOTE=" | imports=absolute"; fi
 
 AGENTS="$PROJECT/AGENTS.md"
 
@@ -167,13 +182,14 @@ done
 {
   printf '%s\n' "<!-- Managed by Master-Claude. Universal rules come from the imported/inlined core."
   printf '%s\n' "     Edit only inside the MC-PROJECT block; mc-sync overwrites everything else. -->"
-  printf '<!-- mc-core: %s | mode=%s | lang=%s%s -->\n' "$CORE_VERSION" "$MODE" "$LANG" "$MOD_NOTE"
+  printf '<!-- mc-core: %s | mode=%s | lang=%s%s%s -->\n' "$CORE_VERSION" "$MODE" "$LANG" \
+    "$MOD_NOTE" "$IMPORT_NOTE"
   printf '# AGENTS.md — %s\n\n' "$NAME"
   if [ "$MODE" = import ]; then
-    printf '@%s/AGENTS.base.md\n' "$CORE_LINK"
-    printf '@%s/lang/%s.md\n' "$CORE_LINK" "$LANG"
+    printf '@%s/AGENTS.base.md\n' "$IMPORT_PREFIX"
+    printf '@%s/lang/%s.md\n' "$IMPORT_PREFIX" "$LANG"
     core_modules | while read -r m; do
-      printf '@%s/modules/%s\n' "$CORE_LINK" "$(basename -- "$m")"
+      printf '@%s/modules/%s\n' "$IMPORT_PREFIX" "$(basename -- "$m")"
     done
   else
     cat "$CORE_SRC/AGENTS.base.md"; printf '\n'
