@@ -6,8 +6,8 @@
 ## What this is
 
 Master-Claude is the curated, **project-agnostic** synthesis of AI-agent knowledge built up
-across ~89 codebases in `~/Code/` (Claude Code, Codex, Gemini), plus the tooling to install
-and keep that knowledge in sync inside any project. See `README.md` and `docs/00-OVERVIEW.md`.
+across ~89 codebases in `~/Code/` (Claude Code, Codex, Antigravity CLI — formerly Gemini
+CLI), plus the tooling to install and keep that knowledge in sync inside any project. See `README.md` and `docs/00-OVERVIEW.md`.
 
 ## Layout
 
@@ -45,8 +45,10 @@ and keep that knowledge in sync inside any project. See `README.md` and `docs/00
   retrofit-safety/self-guard, plus the guard behavior groups 13-20). CI
   (`.github/workflows/ci.yml`) runs shell lint + workflow lint + markdown lint + tests + the
   <200-line curation guard on every push.
-- SkillSpector gate tests: `python3 -m unittest test/test_skillspector_gate.py` (stdlib only,
-  SkillSpector mocked; a separate CI step, since `test/run.sh` covers only the shell guards).
+- SkillSpector gate tests: `python3 -m unittest discover -s test -p 'test_skillspector_gate.py'`
+  (stdlib only, SkillSpector mocked; a separate CI step, since `test/run.sh` covers only the
+  shell guards. Not `-m unittest test/...`: Pythons that ship the stdlib `test` package
+  resolve that name to it).
 - Slash commands live in `commands/`, subagents in `agents/`; register with
   `bin/mc-commands.sh --global` and `bin/mc-commands.sh --agents` so they resolve (Claude Code
   only scans `~/.claude/commands` and `~/.claude/agents`, not this repo).

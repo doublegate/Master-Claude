@@ -87,8 +87,92 @@ All notable changes to this project are documented here. The format is based on
   `.github/workflows/claude-review.yml` stub, removed as redundant.)
 - **Dependabot** (`.github/dependabot.yml`) for the GitHub Actions ecosystem, keeping the
   SHA/digest-pinned third-party actions current.
+- `mc-install.sh --absolute-imports`: opt in to the old expanded-path import lines. Only the
+  deprecated Gemini CLI needs it (its import processor uses `path.resolve(base, importPath)`
+  and does not expand `~`). Stamped as `imports=absolute` in the `mc-core` header comment, so
+  `mc-sync` keeps the choice.
+- `mc-doctor.sh` reports the import-path style: home-relative, or absolute by request. It
+  **warns** on unstamped absolute imports that embed the home path.
+- **Antigravity CLI (`agy`) support**, replacing the deprecated Gemini CLI. Behaviour verified
+  against `agy` 1.5.6 with codeword test projects:
+  - agy reads both `AGENTS.md` and `GEMINI.md`, and de-duplicates the `GEMINI.md`→`AGENTS.md`
+    symlink, so the existing layout is safe.
+  - agy ignores **all** `@import` lines (relative, absolute and `~`), so import mode gives it
+    only the inline rules.
+
+  Changes:
+  - `mc-apply.sh` picks `--inline` for an `.agents/` project (Antigravity's workspace
+    directory) only while the agy plugin is missing. Once agy has the core globally,
+    inlining would load it twice.
+  - **`bin/mc-agy.sh install|verify|uninstall`** gives agy the core *globally*, as a
+    generated agy plugin at `~/.gemini/config/plugins/master-claude/` (`plugin.json` +
+    `rules/`; passes `agy plugin validate`). It holds `AGENTS.base.md`, the modules, the
+    language overlays and the memory digest inline. The user's own global `GEMINI.md` is
+    never edited. It is designed around agy's documented limits, each confirmed with probes:
+    - a 24,000-byte cap per rule file, so the core is packed into `rules/AGENTS.md` +
+      `rules/GEMINI.md` (both load), each ≤ `MC_AGY_MAX_BYTES` (23,500), and a core that
+      won't fit is refused;
+    - a shared 20,000-token budget for always-on and global rules (the full core is about
+      10k tokens). With it installed, the user's global rules, both parts and the project
+      rules all loaded in full.
+
+    Size options `--full` (default), `--modules L|none` and `--no-memory` (about 40 → 9 KB)
+    are stamped, so `verify` and sync keep them. Every refresh and every uninstall first backs
+    the plugin up to `~/.gemini/config/master-claude.plugin.mc-bak/`. That is outside
+    `plugins/` on purpose, because a copy inside it would load as a second plugin; a failed
+    copy is restored from the backup. The `--if-present` no-op and `uninstall` are decided
+    before the core is generated, so they never depend on the byte budget, and `mc-sync`
+    only warns if the plugin refresh fails. Installs are idempotent; a foreign plugin at
+    the path is never overwritten; and a legacy `MC-CORE` block in the global `GEMINI.md`,
+    from the first iteration, is migrated away with a backup. `MC_AGY_PLUGIN_DIR` and
+    `MC_AGY_FILE` override the paths.
+  - `mc-doctor.sh`: when agy is installed (or `MC_AGY_INSTALLED=1`), import-mode projects
+    report OK if the plugin is current, and **warn** with the fix command if it is missing or
+    stale. `.agents/` without the plugin warns too. A new check **warns when a project's
+    `AGENTS.md` exceeds 24,000 bytes**, because agy silently truncates it. This flagged
+    RustyNES (45 KB) and OTP-Local_CLI (37 KB, inline).
+  - `mc-sync.sh` refreshes an existing agy plugin (`install --if-present`; it never creates
+    one).
+  - `mc-mem-bridge.sh`:
+    - `--stdout` prints the digest, for `mc-agy.sh`;
+    - an explicit `antigravity`/`agy` target (`--agy-home`) and a legacy `gemini` target;
+    - the default target is Codex only, since agy gets the digest through `mc-agy.sh`;
+    - unknown targets are rejected.
+  - Docs: `tri-agent-interop.md` (agents table, verification notes, parity matrix, memory,
+    public-repo guidance), `distribution-model.md`, `00-OVERVIEW.md`, `AGENTS.md`,
+    `commands/mc-setup.md`, and the `mc-install.sh` help text.
+- `test/run.sh`: 63 new checks (9 import-path, 6 Antigravity bridge/apply, 48 `mc-agy.sh`).
+  - Import paths: the default is `@~/` with no `$HOME` in `AGENTS.md`;
+    `--absolute-imports` writes and stamps the expanded path, and sync keeps it; doctor
+    accepts a stamped file and warns on an unstamped one; sync converts legacy files and
+    leaves no home path.
+  - Antigravity: the mem-bridge dry-run writes nothing, `--execute` writes the digest, the
+    printed instruction says to read the file, and unknown targets are refused; an `.agents/`
+    project is installed inline, with no `@import` lines.
+  - `mc-agy.sh` (48 checks, sandboxed through `MC_AGY_PLUGIN_DIR`/`MC_AGY_FILE`; includes
+    backups outside `plugins/`, budget-independent no-op and uninstall, and mc-sync
+    surviving a failed refresh):
+    - install and verify, dry-run, idempotency, valid `plugin.json`, every module present,
+      the two-file split under the cap, and the global `GEMINI.md` untouched;
+    - refusing an oversized core, refusing to clobber a foreign plugin, migrating the legacy
+      block, and the doctor's 24,000-byte `AGENTS.md` warning;
+    - stale detection, the doctor reporting OK or warning, and mc-sync refreshing;
+    - `.agents/` projects staying in import mode while the block exists;
+    - slim options stamped and kept through verify and sync;
+    - uninstall, and `--if-present` never creating a block.
 
 ### Changed
+
+- **Import lines are home-relative.** `mc-install.sh` now writes
+  `@~/.claude/master-core/...` instead of the expanded `$HOME` path. This matches what
+  `docs/architecture/distribution-model.md` and `tri-agent-interop.md` already documented.
+  Claude Code expands `~`. Codex and Antigravity ignore `@import` whatever the path form, so
+  the change costs them nothing. Only the deprecated Gemini CLI could follow the old
+  absolute paths; for it, use `--inline`, or `--absolute-imports` in private repositories.
+- Docs: corrected the claim that Gemini CLI ignored `@import` (it processed imports but
+  couldn't expand `~`).
+- `mc-sync.sh` rewrites legacy unstamped absolute imports as `@~/` (it prints a note), and
+  forwards `--absolute-imports` when the file is stamped.
 
 - `master-core/VERSION` 0.1.0 -> 0.2.0 (additive: new module + new tooling, no behavior removed).
 - `master-core/AGENTS.base.md`: added a **Delegation** section (match the model to the work;
@@ -146,6 +230,11 @@ All notable changes to this project are documented here. The format is based on
   - **Tests:** `test/run.sh` covers `MC_SKIP_FILE` and `MC_SKIP`.
   - **History:** earlier commits still contain the old text; rewriting history is a
     separate decision.
+- **Stop leaking the username into managed repositories.** The expanded `$HOME` import paths
+  (`@/Users/<name>/.claude/master-core/...`) put the local username into every committed
+  `AGENTS.md`, including public repositories. Re-running `mc-sync`/`mc-setup` on a project
+  that had been hand-fixed to `@~/` used to bring the paths back; now the default is
+  home-relative, sync converts legacy files, and doctor flags any that remain.
 - `release.yml`: pass the `workflow_dispatch` tag input, event name, and resolved tag via
   `env:` instead of interpolating `${{ ... }}` directly into shell `run:` blocks. This closes
   the Actions script-injection vector (the prior charset validation ran *after* interpolation).

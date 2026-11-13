@@ -35,5 +35,28 @@ if [ -n "$OLD_VER" ] && [ "$OLD_VER" != "$NEW_VER" ]; then
   printf 'mc-sync: core %s -> %s\n' "$OLD_VER" "$NEW_VER"
 fi
 
-printf 'mc-sync: re-syncing %s (lang=%s, %s)\n' "$(basename -- "$PROJECT")" "$LANG" "$MODE"
-exec "$SCRIPT_DIR/mc-install.sh" "$PROJECT" --lang "$LANG" "$MODE"
+# import paths: keep an explicit --absolute-imports choice (stamped "imports=absolute");
+# otherwise (re)write home-relative @~/ imports. A legacy file with absolute imports but
+# no stamp predates the home-relative default and is converted, which also removes the
+# username those paths leak into a committed AGENTS.md.
+ABS=""
+if grep -q '^<!-- mc-core: .*imports=absolute' "$AGENTS"; then
+  ABS=--absolute-imports
+elif grep -q '^@/.*master-core/' "$AGENTS"; then
+  printf 'mc-sync: converting absolute @imports to home-relative @~/ (use mc-install.sh --absolute-imports to keep them)\n'
+fi
+
+printf 'mc-sync: re-syncing %s (lang=%s, %s%s)\n' "$(basename -- "$PROJECT")" "$LANG" "$MODE" \
+  "${ABS:+, $ABS}"
+if [ -n "$ABS" ]; then
+  "$SCRIPT_DIR/mc-install.sh" "$PROJECT" --lang "$LANG" "$MODE" "$ABS"
+else
+  "$SCRIPT_DIR/mc-install.sh" "$PROJECT" --lang "$LANG" "$MODE"
+fi
+
+# Keep Antigravity's global copy of the core current too (only refreshes an existing
+# plugin; it never creates one — that is an explicit `mc-agy.sh install`). A failure here
+# must not fail the project sync that already succeeded: report it instead.
+if ! "$SCRIPT_DIR/mc-agy.sh" install --if-present -q; then
+  printf 'mc-sync: warning: could not refresh the Antigravity plugin; run mc-agy.sh install to see why\n' >&2
+fi

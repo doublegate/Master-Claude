@@ -12,7 +12,7 @@ everything safe and necessary, and performs the semantic follow-up itself. You t
 
 1. Run `bin/mc-apply.sh <project-dir>` (pass through any flags). It will:
    - detect state (new / existing-unmanaged / already-managed),
-   - pick `--inline` if `.codex`/`.gemini` are present, else `--import`,
+   - pick `--inline` if `.codex`/`.gemini`/`.agents` (Antigravity) are present, else `--import`,
    - seed + `--trim` an existing file, or `mc-sync` a managed one, or blank-install a new one,
    - run `mc-doctor` and print a final `MC-NEXT:` line.
 2. Read the `MC-NEXT:` signal and continue without asking the user to run anything else:
