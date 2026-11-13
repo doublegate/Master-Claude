@@ -43,6 +43,11 @@ done
 G_BASH="$GUARDS/guard-bash.sh"
 G_WRITE="$GUARDS/guard-write.sh"
 DENY_FILE="$GUARDS/deny-rules.json"
+# SkillSpector install gate. Registered with its own timeout: an LLM-backed scan takes
+# about a minute per skill, far past the 60 s hook default.
+G_GATE="$GUARDS/skillspector-gate.py"
+G_GATE_CMD="$G_GATE hook --agent claude"
+G_GATE_TIMEOUT=900
 
 # Rule files for the security-guidance plugin. The plugin looks for these by exact name in
 # ~/.claude (user scope). Symlinked, not copied, so repo edits propagate like commands/ do.
@@ -81,11 +86,19 @@ def addhook($matcher; $cmd):
   else .hooks.PreToolUse = ((.hooks.PreToolUse // [])
                             + [{matcher: $matcher, hooks: [{type: "command", command: $cmd}]}])
   end;
+def addgate($cmd; $timeout):
+  .hooks.PreToolUse |= map(
+    if .matcher == "Bash"
+    then .hooks = ((.hooks // []) | map(select(.command != $cmd))
+                   + [{type: "command", command: $cmd, timeout: $timeout,
+                       statusMessage: "SkillSpector: scanning skill before install"}])
+    else . end);
 .permissions = (.permissions // {})
 | .permissions.deny = (((.permissions.deny // []) + $deny) | unique)
 | .hooks = (.hooks // {})
 | addhook("Bash"; $gbash)
 | addhook("Write|Edit|NotebookEdit"; $gwrite)
+| addgate($ggate; $gtimeout)
 '
 
 STRIP='
@@ -95,7 +108,7 @@ def dropcmd($cmd):
 .permissions.deny = (((.permissions.deny // []) - $deny) )
 | if (.permissions.deny | length) == 0 then del(.permissions.deny) else . end
 | if (.hooks.PreToolUse | type) == "array"
-  then dropcmd($gbash) | dropcmd($gwrite) else . end
+  then dropcmd($gbash) | dropcmd($gwrite) | dropcmd($ggate) else . end
 '
 
 case "$CMD" in
@@ -103,14 +116,15 @@ case "$CMD" in
   install)
     [ -f "$SETTINGS" ] || die "no settings file at $SETTINGS"
     jq -e . "$SETTINGS" >/dev/null 2>&1 || die "settings file is not valid JSON: $SETTINGS"
-    for g in "$G_BASH" "$G_WRITE"; do
-      [ -x "$g" ] || die "guard not executable: $g (run: chmod +x guards/*.sh)"
+    for g in "$G_BASH" "$G_WRITE" "$G_GATE"; do
+      [ -x "$g" ] || die "guard not executable: $g (run: chmod +x guards/*.sh guards/*.py)"
       case "$g" in
         *[[:space:]\'\"\\\`\$\<\>\&\|\;]*) die "guard path contains spaces or shell metacharacters: $g" ;;
       esac
     done
     OUT=$(jq --slurpfile d "$DENY_FILE" \
              --arg gbash "$G_BASH" --arg gwrite "$G_WRITE" \
+             --arg ggate "$G_GATE_CMD" --argjson gtimeout "$G_GATE_TIMEOUT" \
              '$d[0].deny as $deny | '"$MERGE" "$SETTINGS")
     if [ "$DRY" -eq 1 ]; then
       printf 'mc-guard: dry-run, would write to %s:\n\n' "$SETTINGS"
@@ -130,7 +144,7 @@ case "$CMD" in
     [ -f "$SETTINGS" ] || die "no settings file at $SETTINGS"
     cp "$SETTINGS" "$SETTINGS.mc-bak"
     jq --slurpfile d "$DENY_FILE" \
-       --arg gbash "$G_BASH" --arg gwrite "$G_WRITE" \
+       --arg gbash "$G_BASH" --arg gwrite "$G_WRITE" --arg ggate "$G_GATE_CMD" \
        '$d[0].deny as $deny | '"$STRIP" "$SETTINGS" > "$SETTINGS.mc-tmp"
     jq -e . "$SETTINGS.mc-tmp" >/dev/null || die "refusing to uninstall: output is not valid JSON"
     mv "$SETTINGS.mc-tmp" "$SETTINGS"
@@ -148,6 +162,12 @@ case "$CMD" in
            "$SETTINGS" >/dev/null; then ok "hook registered: $(basename "$g")"
       else fail "hook not registered: $(basename "$g")"; rc=1; fi
     done
+    if [ -x "$G_GATE" ]; then ok "guard executable: $(basename "$G_GATE")"
+    else fail "guard not executable: $G_GATE"; rc=1; fi
+    if jq -e --arg c "$G_GATE_CMD" --argjson t "$G_GATE_TIMEOUT" \
+         'any((.hooks.PreToolUse // [])[]; any((.hooks // [])[]; .command == $c and (.timeout // 0) >= $t))' \
+         "$SETTINGS" >/dev/null; then ok "hook registered: $(basename "$G_GATE") (timeout >= ${G_GATE_TIMEOUT}s)"
+    else fail "hook not registered with timeout >= ${G_GATE_TIMEOUT}s: $(basename "$G_GATE")"; rc=1; fi
     n=$(jq '(.permissions.deny // []) | length' "$SETTINGS")
     want=$(jq '.deny | length' "$DENY_FILE")
     if [ "$n" -ge "$want" ]; then ok "permissions.deny has $n rules (>= $want expected)"

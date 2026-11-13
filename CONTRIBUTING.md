@@ -21,9 +21,10 @@ Read `AGENTS.md` — it is the canonical working agreement for this repo (and `C
 ```sh
 shellcheck bin/*.sh test/run.sh     # lint
 sh test/run.sh                      # sandboxed self-tests
+python3 -m unittest test/test_skillspector_gate.py   # SkillSpector gate (stdlib, scanner mocked)
 ```
 
-CI (`.github/workflows/ci.yml`) runs both plus the curation guard on every push.
+CI (`.github/workflows/ci.yml`) runs all three plus the curation guard on every push.
 
 ## Commits & PRs
 

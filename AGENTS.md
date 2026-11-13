@@ -45,6 +45,8 @@ and keep that knowledge in sync inside any project. See `README.md` and `docs/00
   retrofit-safety/self-guard, plus the guard behavior groups 13-20). CI
   (`.github/workflows/ci.yml`) runs shell lint + workflow lint + markdown lint + tests + the
   <200-line curation guard on every push.
+- SkillSpector gate tests: `python3 -m unittest test/test_skillspector_gate.py` (stdlib only,
+  SkillSpector mocked; a separate CI step, since `test/run.sh` covers only the shell guards).
 - Slash commands live in `commands/`, subagents in `agents/`; register with
   `bin/mc-commands.sh --global` and `bin/mc-commands.sh --agents` so they resolve (Claude Code
   only scans `~/.claude/commands` and `~/.claude/agents`, not this repo).

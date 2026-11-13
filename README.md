@@ -85,6 +85,8 @@ bin/mc-guard.sh   verify                      # is the enforcement layer install
   permission rules and hooks decide what it *may do*. `guards/` covers the small set of actions
   that destroy unrecoverable work — and only in the destructive case, so the guard stays
   trustworthy: `git checkout <path>` is blocked on a dirty tree and allowed on a clean one.
+  It also gates skill installs: `guards/skillspector-gate.py` scans a skill with SkillSpector
+  before an agent copies, clones or unpacks it into a skills directory.
 
 Start with `docs/00-OVERVIEW.md`, then `docs/01-KNOWLEDGE-TAXONOMY.md`.
 
