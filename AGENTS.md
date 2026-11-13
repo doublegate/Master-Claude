@@ -39,7 +39,7 @@ and keep that knowledge in sync inside any project. See `README.md` and `docs/00
 ## Build / verify
 
 - Shell lint: `shellcheck --severity=warning bin/*.sh guards/*.sh test/*.sh`
-- Markdown lint: `npx markdownlint-cli2@0.23.1 "**/*.md"` (config + per-rule rationale in
+- Markdown lint: `npx markdownlint-cli2@0.24.0 "**/*.md"` (config + per-rule rationale in
   `.markdownlint.json`; pin the version — an unpinned newer linter reports ungated rules).
 - Self-tests: `sh test/run.sh` (sandboxed: install/symlinks/idempotency/seed/trim/state/
   retrofit-safety/self-guard, plus the guard behavior groups 13-20). CI
