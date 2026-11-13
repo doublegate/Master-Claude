@@ -8,6 +8,29 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **SkillSpector post-install verification** (closes #34). A remote install (`git clone`, or
+  `npx skills add` from a repo) used to be scanned from the gate's own clone while the agent's
+  command fetched the source again, so a moving branch or a remote serving different bytes per
+  request could install content the gate never saw.
+  - The pre-install hook now records the scanned digest of every remote skill, keyed by the
+    exact command, in `~/.cache/skillspector-gate/gate-pending.json`. The file is protected
+    like the approvals file (Bash tamper check plus `guard-write.sh`), and entries expire
+    after 24 h.
+  - The new `skillspector-gate.py post --agent …` (`PostToolUse`) hashes what was actually
+    installed. A `git clone` is found at its destination; a `skills add` skill is found by name
+    in the agent skills dirs, newest since the scan.
+  - On a mismatch the install is moved to `~/.cache/skillspector-gate/quarantine/` and Claude
+    gets `decision: block` with the reason. If the skill cannot be found it is reported as
+    unverified, never as a match.
+  - Every outcome is written to the audit log.
+  - `bin/mc-guard.sh` registers the post hook (`PostToolUse`, Bash, 120 s) on `install`,
+    verifies it, and removes only that entry on `uninstall`, keeping foreign `PostToolUse`
+    hooks.
+  - Tests: 9 new gate tests: match verified; git and `skills add` mismatches quarantined;
+    missing install unverified; denied and local installs record nothing; unrelated commands
+    ignored; the pending file is protected. They also redirect `PENDING_FILE` and
+    `QUARANTINE_DIR`, so no test touches the real cache. Guard tests cover registration,
+    removal and the `guard-write` block.
 - **SkillSpector install gate** — `guards/skillspector-gate.py`, a `PreToolUse` Bash hook for
   Claude Code, Codex and agy. It recognizes commands that install a skill into an agent skills
   directory (`git clone`, `cp`/`mv`/`rsync`/`ln`, `unzip`/`tar`, `npx skills add`), scans every
