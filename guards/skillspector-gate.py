@@ -6,6 +6,7 @@ commands that install a skill into an agent skills directory, scans every skill 
 would install, and only stays out of the way when SkillSpector says the skill is safe.
 
   skillspector-gate.py hook --agent claude|codex|agy    (stdin: the hook payload)
+  skillspector-gate.py post --agent claude|codex|agy    (PostToolUse: verify the install)
   skillspector-gate.py approve <target> [--skill NAME]  (human only: accept a verdict)
   skillspector-gate.py check <target> [--skill NAME]    (run the gate by hand)
 
@@ -38,21 +39,29 @@ cd/mkdir/ls/pwd/test, since those steps run after the scan.
 Known gaps. This is a policy guard over the command TEXT, not a sandbox: an agent set on
 evading it (an interpreter writing a file under an assembled name) can still reach the
 protected files; only an approvals store the agent's user cannot write (root-owned, or
-signed with a key it cannot read) would close that. For git and `skills add` installs the
-gate scans its own clone and the agent's command fetches again, so a remote serving
-different content per request can install bytes the gate never saw; closing it needs a
-post-install hash of the installed tree against the scanned digest, or the gate copying
-the scanned tree into place itself.
+signed with a key it cannot read) would close that.
+
+Remote installs are verified after the fact. For git and `skills add` the gate scans its
+own clone and the agent's command fetches again, so a remote serving different content per
+request could install bytes the gate never saw. The pre-install hook therefore records the
+scanned digest of every skill, keyed by the exact command, in gate-pending.json (protected
+like the approvals file). The `post` hook (PostToolUse) hashes what was actually installed
+and, on any mismatch, moves the install into the gate's quarantine directory and tells the
+agent. A `skills add` destination is chosen by that CLI, so the post hook looks for the
+skill by name in the agent skills dirs; if it cannot find it, it reports the install as
+unverified rather than claiming it matched.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -60,6 +69,11 @@ import tempfile
 import time
 import zipfile
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover -- non-POSIX: no interprocess lock available
+    fcntl = None
 
 HOME = Path.home()
 STATE_DIR = Path(
@@ -72,6 +86,10 @@ CACHE_FILE = Path(
     )
 )
 APPROVALS_NAME = "gate-approvals.json"
+# Scanned digests of remote installs awaiting post-install verification (see `post`).
+PENDING_FILE = CACHE_FILE.parent / "gate-pending.json"
+PENDING_TTL = 86400
+QUARANTINE_DIR = CACHE_FILE.parent / "quarantine"
 SKILLSPECTOR_PY = os.environ.get(
     "SKILLSPECTOR_GATE_PYTHON",
     str(HOME / ".local/share/uv/tools/skillspector/bin/python"),
@@ -127,7 +145,7 @@ KEYWORDS = (
 # Files whose contents decide a verdict. A cached safe_to_install passes a skill without a
 # rescan, so the verdict cache needs the same protection as the approvals file: writing
 # either one forges a pass.
-PROTECTED_NAMES = (APPROVALS_NAME, CACHE_FILE.name)
+PROTECTED_NAMES = (APPROVALS_NAME, CACHE_FILE.name, PENDING_FILE.name)
 GIT_OPTS_WITH_VALUE = {
     "-b",
     "--branch",
@@ -403,7 +421,7 @@ def detect(command: str, cwd: Path) -> tuple[list[dict], str | None]:
         argv = strip_wrappers(words(sub))
         if not argv:
             continue
-        before = len(targets)
+        before, here = len(targets), cwd
         try:
             cwd, tamper = _detect_one(argv, cwd, targets, near)
         except Exception:  # noqa: BLE001 -- unparseable input fails closed below
@@ -412,6 +430,10 @@ def detect(command: str, cwd: Path) -> tuple[list[dict], str | None]:
             continue
         if tamper:
             return [], tamper
+        for t in targets[before:]:
+            # The effective cwd after any earlier `cd` in the chain: where a `skills add`
+            # installs, and so where the post-install check must look.
+            t.setdefault("cwd", str(here))
         if len(targets) == before and os.path.basename(argv[0]) not in BENIGN_IN_CHAIN:
             others.append(sub.strip())
     # The gate scans before the whole chain runs, so any other step can change a source,
@@ -474,7 +496,9 @@ def _detect_one(
             return cwd, None
         if in_skills_dir(dest):
             ref = opt_value(rest[1:], ("-b", "--branch"), GIT_OPTS_WITH_VALUE)
-            targets.append({"kind": "git", "source": url, "ref": ref})
+            targets.append(
+                {"kind": "git", "source": url, "ref": ref, "dest": str(dest)}
+            )
     elif cmd in ("cp", "mv", "rsync", "ln", "install"):
         if cmd == "rsync":
             pos, tdir = positionals(args, RSYNC_OPTS_WITH_VALUE), None
@@ -742,9 +766,16 @@ def load_json(path: Path) -> dict:
 
 def save_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
-    tmp.replace(path)
+    # A unique temp name per writer: a fixed one made two concurrent saves race on it.
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.stem}-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(data, indent=1, sort_keys=True))
+        os.replace(name, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(name)
+        raise
 
 
 def config_key() -> str:
@@ -824,8 +855,19 @@ def summarise(name: str, v: dict) -> str:
 SEV = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
 
 
-def evaluate(targets: list[dict], deadline: float) -> tuple[str, str]:
-    """Return (decision, reason). decision in pass|ask|deny."""
+def is_remote(t: dict) -> bool:
+    """True for sources the agent's command fetches again after the scan (git clone, a
+    `skills add` spec that is not a local path)."""
+    if t["kind"] == "git":
+        return True
+    return t["kind"] == "spec" and not Path(t["source"]).is_absolute()
+
+
+def evaluate(
+    targets: list[dict], deadline: float, bindings: list[dict] | None = None
+) -> tuple[str, str]:
+    """Return (decision, reason). decision in pass|ask|deny. When `bindings` is a list,
+    every scanned skill of a remote source is appended to it for post-install checks."""
     approvals = load_json(STATE_DIR / APPROVALS_NAME)
     cache = load_json(CACHE_FILE)
     worst, notes = "pass", []
@@ -877,9 +919,38 @@ def evaluate(targets: list[dict], deadline: float) -> tuple[str, str]:
                     f"{MAX_SKILLS}; install them one at a time with --skill"
                 )
                 continue
+            root_digest = None
+            if bindings is not None and t["kind"] == "git":
+                # Bind the whole cloned tree, not just the skills found in it: a second
+                # fetch that adds a skill (or changes any file a skill uses) must not verify.
+                try:
+                    root_digest = tree_hash(root)
+                except GateError:
+                    root_digest = (
+                        None  # too large to bind whole; skills are still checked
+                    )
             for d in skills:
                 digest = tree_hash(d)
                 label = f"{t['source']}{'' if d == root else ' :: ' + d.name}"
+                if bindings is not None and is_remote(t):
+                    bindings.append(
+                        {
+                            "kind": t["kind"],
+                            "source": t["source"],
+                            "dest": t.get("dest"),
+                            "cwd": t.get("cwd"),
+                            "rel": "" if d == root else d.relative_to(root).as_posix(),
+                            "name": skill_name(d) or d.name,
+                            "digest": digest,
+                            "root_digest": root_digest,
+                            "inventory": sorted(
+                                "" if x == root else x.relative_to(root).as_posix()
+                                for x in find_skills(root, None)
+                            )
+                            if t["kind"] == "git"
+                            else [],
+                        }
+                    )
                 if digest in approvals:
                     notes.append(
                         f"{label}: approved by the user on {approvals[digest].get('date')}"
@@ -917,17 +988,32 @@ def max_dec(a: str, b: str) -> str:
 # --- agent protocols -------------------------------------------------------------------
 
 
+# Identity of the tool invocation, used to pair a pre-install record with its own
+# post-install check: {"session": ..., "call": ...}; values may be empty.
+LAST_IDS: dict[str, str] = {}
+
+
 def read_payload(agent: str) -> tuple[str, Path, str | None]:
     """Return (command, cwd, permission_mode). permission_mode is None when the agent
-    does not report one."""
+    does not report one. Also sets LAST_IDS (session / tool-call ids, when reported)."""
     data = json.loads(sys.stdin.read() or "{}")
     if agent == "agy":
         call = data.get("toolCall") or {}
+        LAST_IDS.clear()
+        LAST_IDS.update(
+            session=str(data.get("conversationId") or data.get("sessionId") or ""),
+            call=str(call.get("id") or ""),
+        )
         if call.get("name") != "run_command":
             return "", HOME, None
         args = call.get("args") or {}
         ws = (data.get("workspacePaths") or [str(HOME)])[0]
         return str(args.get("CommandLine") or ""), Path(args.get("Cwd") or ws), None
+    LAST_IDS.clear()
+    LAST_IDS.update(
+        session=str(data.get("session_id") or ""),
+        call=str(data.get("tool_use_id") or ""),
+    )
     ti = data.get("tool_input") or {}
     cmd = ti.get("command") or ""
     if isinstance(cmd, list):
@@ -1022,6 +1108,362 @@ def escalate(agent: str, mode: str | None, decision: str) -> tuple[str, str]:
     return decision, ""
 
 
+def command_key(command: str) -> str:
+    return hashlib.sha256(command.strip().encode()).hexdigest()
+
+
+def _entries(value) -> list[dict]:
+    return (
+        value if isinstance(value, list) else [value] if isinstance(value, dict) else []
+    )
+
+
+def stat_signature(path: Path) -> str | None:
+    """Cheap fingerprint of a directory (every entry's path, size and mtime), with no size
+    limit: tells whether an install changed a destination that existed before it. None
+    when the path does not exist."""
+    if not path.exists():
+        return None
+    h = hashlib.sha256()
+    try:
+        entries = [path, *sorted(path.rglob("*"))] if path.is_dir() else [path]
+        for e in entries:
+            st = e.lstat()
+            rel = "." if e == path else e.relative_to(path).as_posix()
+            h.update(f"{rel}\0{st.st_size}\0{st.st_mtime_ns}\0".encode())
+    except OSError:
+        return "unreadable"
+    return h.hexdigest()
+
+
+@contextlib.contextmanager
+def pending_lock():
+    """Serialise read-modify-write of the pending file across concurrent hook processes;
+    the atomic replace in save_json alone would still lose one of two overlapping updates."""
+    PENDING_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(PENDING_FILE.with_suffix(".lock"), "a", encoding="utf-8") as fh:
+        if fcntl is not None:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if fcntl is not None:
+                fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def record_pending(command: str, cwd: Path, bindings: list[dict]) -> None:
+    """Remember what was scanned for this exact command, for the post-install check.
+    Entries are a list per command and carry the invocation identity, so the same command
+    run concurrently in two sessions or workspaces keeps two independent checks."""
+    if not bindings:
+        return
+    with pending_lock():
+        pending = load_json(PENDING_FILE)
+        now = time.time()
+        pending = {
+            k: kept
+            for k, v in pending.items()
+            if (kept := [e for e in _entries(v) if now - e.get("at", 0) < PENDING_TTL])
+        }
+        # Snapshot what already exists in the skills dirs a `skills add` may write to, so the
+        # post check can tell this install's additions from skills that were already there.
+        where = {b.get("cwd") or str(cwd) for b in bindings if b["kind"] != "git"}
+        before = sorted(
+            str(d)
+            for w in where
+            for sd in skills_dirs(Path(w))
+            for d in sd.iterdir()
+            if d.is_dir()
+        )
+        # A git clone into an existing non-empty dir fails and installs nothing; remember
+        # each destination's state so a failed clone never quarantines what was there.
+        dests = {
+            b["dest"]: stat_signature(Path(b["dest"]))
+            for b in bindings
+            if b["kind"] == "git" and b.get("dest")
+        }
+        entry = {
+            "at": now,
+            "cwd": str(cwd),
+            "before": before,
+            "dest_before": {d: sig for d, sig in dests.items() if sig is not None},
+            "session": LAST_IDS.get("session", ""),
+            "call": LAST_IDS.get("call", ""),
+            "items": bindings,
+        }
+        pending.setdefault(command_key(command), []).append(entry)
+        save_json(PENDING_FILE, pending)
+
+
+def take_pending(command: str, cwd: Path) -> dict | None:
+    """Remove and return the pre-install record that belongs to this invocation: same tool
+    call id, else same session and cwd, else same cwd, else the oldest."""
+    with pending_lock():
+        pending = load_json(PENDING_FILE)
+        key = command_key(command)
+        entries = _entries(pending.get(key))
+        if not entries:
+            return None
+        sid, call, where = (
+            LAST_IDS.get("session", ""),
+            LAST_IDS.get("call", ""),
+            str(cwd),
+        )
+        rules = (
+            lambda e: bool(call) and e.get("call") == call,
+            lambda e: bool(sid) and e.get("session") == sid and e.get("cwd") == where,
+            lambda e: e.get("cwd") == where,
+            lambda e: True,
+        )
+        chosen = next((e for rule in rules for e in entries if rule(e)), entries[0])
+        entries.remove(chosen)
+        if entries:
+            pending[key] = entries
+        else:
+            pending.pop(key, None)
+        save_json(PENDING_FILE, pending)
+        return chosen
+
+
+def skills_dirs(cwd: Path) -> list[Path]:
+    out = []
+    for base in (HOME, cwd):
+        for home in sorted(AGENT_HOMES):
+            d = base / home / "skills"
+            if d.is_dir() and d not in out:
+                out.append(d)
+    return out
+
+
+def _touched(d: Path, since: float) -> bool:
+    """True when the dir, or any file under it, was modified no earlier than the scan."""
+    cutoff = since - 5
+    try:
+        if d.stat().st_mtime >= cutoff:
+            return True
+        return any(f.stat().st_mtime >= cutoff for f in d.rglob("*") if f.is_file())
+    except OSError:
+        return True  # cannot tell: check it rather than skip it
+
+
+def locate(
+    item: dict, cwd: Path, since: float, before: set[str] | None = None
+) -> list[tuple[Path, Path]]:
+    """Every (installed skill dir, install root to quarantine) this install produced for
+    one scanned skill; empty when none can be found."""
+    if item["kind"] == "git" and item.get("dest"):
+        root = Path(item["dest"])
+        skill = root / item["rel"] if item["rel"] else root
+        return [(skill, root)] if skill.exists() else []
+    # `skills add` picks its own destinations, possibly several (HOME and the project,
+    # several agents, symlink aliases): every copy by that name that is new since the
+    # pre-install snapshot or was modified since the scan is checked, one per real path.
+    name, found, real = item["name"], [], set()
+    for sd in skills_dirs(cwd):
+        for d in sorted(sd.iterdir()):
+            if not d.is_dir() or not (d.name == name or skill_name(d) == name):
+                continue
+            new = before is not None and str(d) not in before
+            if not (new or _touched(d, since)):
+                continue
+            key = os.path.realpath(d)
+            if key in real:
+                continue
+            real.add(key)
+            found.append((d, d))
+    return found
+
+
+def quarantine(path: Path) -> Path:
+    """Move an installed skill into quarantine and return where it went.
+
+    A symlinked skill (e.g. `.claude/skills/x` -> `.agents/skills/x`, the layout `skills
+    add` uses) is resolved: the content it points at is moved, then the link is removed,
+    so the real skill is never left behind. A link into a place that is not a skills dir is
+    removed (the skill is no longer installed) and reported, since that content was not
+    installed by this command and is not ours to move."""
+    target = path
+    if path.is_symlink():
+        real = path.resolve()
+        if not in_skills_dir(real):
+            path.unlink()
+            raise OSError(
+                f"it linked to {real}, outside any skills dir; the link was removed, "
+                f"review {real} by hand"
+            )
+        target = real
+    QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
+    dest = QUARANTINE_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}-{target.name}"
+    n = 1
+    while dest.exists():
+        n += 1
+        dest = dest.with_name(f"{dest.name}-{n}")
+    shutil.move(str(target), str(dest))
+    if path.is_symlink():
+        path.unlink()
+    return dest
+
+
+def post(agent: str) -> int:
+    """PostToolUse: check that what a remote install wrote is what the gate scanned."""
+    try:
+        command, cwd, mode = read_payload(agent)
+    except Exception:  # noqa: BLE001 -- nothing to verify without a command
+        return 0
+    if not command:
+        return 0
+    entry = take_pending(command, cwd)
+    if entry is None:
+        return 0
+    since = entry.get("at", 0)
+    base = Path(entry.get("cwd") or cwd)
+    before = set(entry["before"]) if isinstance(entry.get("before"), list) else None
+    dest_before = entry.get("dest_before") or {}
+    bad, unverified, sources = [], [], []
+
+    def reject(label: str, root: Path, why: str) -> None:
+        try:
+            moved = quarantine(root)
+            bad.append(f"{label}: {why}; moved to {moved}")
+        except OSError as exc:
+            bad.append(f"{label}: {why} and could not be quarantined: {exc}")
+
+    # git clones: the whole installed tree must equal the scanned tree, so an added skill or
+    # any changed file fails, not only a changed scanned skill. `done` holds the clones
+    # settled here; a clone too large to hash whole keeps its per-skill checks below.
+    seen: set[str] = set()
+    done: set[str] = set()
+    unchanged: list[str] = []
+    for item in entry.get("items", []):
+        dest = item.get("dest")
+        if item["kind"] != "git" or not dest or dest in seen:
+            continue
+        seen.add(dest)
+        root = Path(dest)
+        if not root.exists():
+            continue  # reported unverified by the per-skill loop
+        if dest in dest_before and stat_signature(root) == dest_before[dest]:
+            # Existed before and untouched: the clone failed (or never ran), so nothing
+            # was installed here and nothing of the user's is moved.
+            done.add(dest)
+            unchanged.append(item["source"])
+            continue
+        if item.get("root_digest"):
+            try:
+                same = tree_hash(root) == item["root_digest"]
+            except (GateError, OSError):
+                same = False
+            done.add(dest)
+            if not same:
+                reject(
+                    item["source"], root, "installed tree differs from what was scanned"
+                )
+        else:  # too large to bind whole: the skill inventory must match, then each skill
+            got = sorted(
+                "" if x == root else x.relative_to(root).as_posix()
+                for x in find_skills(root, None)
+            )
+            if got != item.get("inventory", got):
+                done.add(dest)
+                reject(
+                    item["source"], root, "installed skills differ from the scanned set"
+                )
+    items = [
+        i
+        for i in entry.get("items", [])
+        if not (i["kind"] == "git" and i.get("dest") in done)
+    ]
+    for item in items:
+        label = item["source"] + (f" :: {item['name']}" if item.get("rel") else "")
+        sources.append(label)
+        try:
+            copies = locate(item, Path(item.get("cwd") or base), since, before)
+        except OSError:
+            copies = []
+        if not copies:
+            unverified.append(label)
+            continue
+        for installed, root in copies:
+            try:
+                got = tree_hash(installed)
+            except (GateError, OSError):
+                got = None
+            if got != item["digest"]:
+                where = "" if len(copies) == 1 else f" ({installed})"
+                reject(
+                    label + where,
+                    root,
+                    "installed content differs from what was scanned",
+                )
+    # `skills add`: a skill dir absent from the pre-install snapshot and not among the
+    # scanned skills is an unscanned addition (quarantined, reported). Skills that another
+    # pending gated install is expecting are left for that install's own check.
+    spec = [i for i in entry.get("items", []) if i["kind"] != "git"]
+    names = {i["name"] for i in spec}
+    if spec and before is not None:
+        expected = {
+            i.get("name")
+            for v in load_json(PENDING_FILE).values()
+            for e in _entries(v)
+            for i in e.get("items", [])
+        }
+        dirs = {sd for i in spec for sd in skills_dirs(Path(i.get("cwd") or base))}
+        for sd in sorted(dirs):
+            for d in sorted(sd.iterdir()):
+                if str(d) in before or not d.is_dir():
+                    continue
+                if not (d / "SKILL.md").is_file():
+                    continue
+                n = skill_name(d)
+                if d.name in names or n in names or d.name in expected or n in expected:
+                    continue
+                reject(
+                    str(d), d, "skill appeared during this install but was not scanned"
+                )
+    sources += sorted(
+        {i["source"] for i in entry.get("items", []) if i["kind"] == "git"}
+    )
+    sources = [x for x in sources if x not in unchanged]
+    if unchanged:
+        audit(agent, mode, "not-installed", unchanged)
+    if bad:
+        audit(agent, mode, "quarantined", sources)
+        reason = (
+            "SkillSpector gate: the installed skill does not match the content that was "
+            "scanned before the install (the source changed, or served different bytes "
+            "to the second fetch). It was NOT left in place:\n"
+            + "\n".join(bad)
+            + "\nRe-run the install so the gate scans what will really be installed."
+        )
+        if agent == "agy":
+            print(reason, file=sys.stderr)
+        else:
+            print(
+                json.dumps(
+                    {
+                        "decision": "block",
+                        "reason": reason,
+                        "hookSpecificOutput": {
+                            "hookEventName": "PostToolUse",
+                            "additionalContext": reason,
+                        },
+                    }
+                )
+            )
+        return 0
+    if unverified:
+        audit(agent, mode, "unverified", unverified)
+        print(
+            "SkillSpector gate: could not locate the installed skill to verify it against the "
+            "scan: " + ", ".join(unverified),
+            file=sys.stderr,
+        )
+        return 0
+    if sources:
+        audit(agent, mode, "verified", sources)
+    return 0
+
+
 def hook(agent: str) -> int:
     try:
         command, cwd, mode = read_payload(agent)
@@ -1044,8 +1486,9 @@ def hook(agent: str) -> int:
         return 0
     sources = [t["source"] for t in targets]
     srcs = " ".join(shlex.quote(s) for s in sources)
+    bindings: list[dict] = []
     try:
-        decision, notes = evaluate(targets, time.time() + TOTAL_BUDGET)
+        decision, notes = evaluate(targets, time.time() + TOTAL_BUDGET, bindings)
     except Exception as exc:  # noqa: BLE001 -- fail closed once an install is recognised
         decision, note = escalate(agent, mode, "ask")
         audit(agent, mode, decision, sources)
@@ -1059,6 +1502,12 @@ def hook(agent: str) -> int:
         return 0
     decision, note = escalate(agent, mode, decision)
     audit(agent, mode, decision, sources)
+    if decision != "deny":
+        # pass, or an ask the user may accept: the command can still run, so remember
+        # what was scanned for the post-install check. A write failure only means the
+        # post check finds nothing to verify; the scan's verdict still stands.
+        with contextlib.suppress(OSError):
+            record_pending(command, cwd, bindings)
     if decision == "pass":
         if notes:
             print(f"SkillSpector gate: {notes}", file=sys.stderr)
@@ -1126,8 +1575,9 @@ def main() -> int:
         prog="skillspector-gate", description=(__doc__ or "").split("\n\n")[0]
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
-    h = sub.add_parser("hook")
-    h.add_argument("--agent", choices=("claude", "codex", "agy"), required=True)
+    for name in ("hook", "post"):
+        h = sub.add_parser(name)
+        h.add_argument("--agent", choices=("claude", "codex", "agy"), required=True)
     for name in ("approve", "check"):
         p = sub.add_parser(name)
         p.add_argument("target")
@@ -1135,6 +1585,8 @@ def main() -> int:
     a = ap.parse_args()
     if a.cmd == "hook":
         return hook(a.agent)
+    if a.cmd == "post":
+        return post(a.agent)
     if a.cmd == "approve":
         return approve(a.target, a.skill)
     return check(a.target, a.skill)
