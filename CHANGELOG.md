@@ -133,6 +133,19 @@ All notable changes to this project are documented here. The format is based on
 
 ### Security
 
+- **Remove personal paths and private project names from the public repo.**
+  - **Source lists:** the `docs/knowledge/*.md` lists cited 49 absolute `/home/<user>/…`
+    paths, now home-relative `~/…`. Projects under `Commercial_Private-Projects/` and
+    `Local_Only-Projects/` are shown as `<private>`; public `OSS_Public-Projects/` names
+    stay.
+  - **Skip lists:** `mc-apply-all.sh` / `mc-doctor-all.sh` hardcoded personal folder names.
+    They now keep only generic defaults and read personal names from
+    `~/.config/master-claude/skip` (`MC_SKIP_FILE`) and `MC_SKIP`, outside the repository.
+  - **Prevention:** `mc-selfcheck.sh` (run in CI) fails on any absolute home path in a
+    tracked file outside `test/`, whose fixtures use a made-up `/home/u`.
+  - **Tests:** `test/run.sh` covers `MC_SKIP_FILE` and `MC_SKIP`.
+  - **History:** earlier commits still contain the old text; rewriting history is a
+    separate decision.
 - `release.yml`: pass the `workflow_dispatch` tag input, event name, and resolved tag via
   `env:` instead of interpolating `${{ ... }}` directly into shell `run:` blocks. This closes
   the Actions script-injection vector (the prior charset validation ran *after* interpolation).

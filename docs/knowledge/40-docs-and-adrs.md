@@ -91,7 +91,7 @@ trees exempt from linters and reformatters so tooling does not churn them.
 
 ## Sources
 
-- /home/parobek/Code/OSS_Public-Projects/RustyNES/CLAUDE.md
-- /home/parobek/Code/OSS_Public-Projects/ProRT-IP/CLAUDE.md
-- /home/parobek/Code/OSS_Public-Projects/ProRT-IP/AGENTS.md
-- /home/parobek/Code/OSS_Public-Projects/AirGapSync/docs/PROJECT-STATUS.md
+- ~/Code/OSS_Public-Projects/RustyNES/CLAUDE.md
+- ~/Code/OSS_Public-Projects/ProRT-IP/CLAUDE.md
+- ~/Code/OSS_Public-Projects/ProRT-IP/AGENTS.md
+- ~/Code/OSS_Public-Projects/AirGapSync/docs/PROJECT-STATUS.md

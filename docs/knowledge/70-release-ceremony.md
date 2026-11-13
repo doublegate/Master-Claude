@@ -91,7 +91,7 @@ releases auditable and lets the work be delegated.
 
 ## Sources
 
-- /home/parobek/Code/OSS_Public-Projects/ProRT-IP/CLAUDE.md (Release Standards)
-- /home/parobek/Code/OSS_Public-Projects/ProRT-IP/.claude/commands/pre-release.md
-- /home/parobek/Code/OSS_Public-Projects/ProRT-IP/.claude/commands/phase-complete.md
-- /home/parobek/Code/OSS_Public-Projects/RustyNES/CLAUDE.md (release flags, staged mobile rollout, SemVer policy)
+- ~/Code/OSS_Public-Projects/ProRT-IP/CLAUDE.md (Release Standards)
+- ~/Code/OSS_Public-Projects/ProRT-IP/.claude/commands/pre-release.md
+- ~/Code/OSS_Public-Projects/ProRT-IP/.claude/commands/phase-complete.md
+- ~/Code/OSS_Public-Projects/RustyNES/CLAUDE.md (release flags, staged mobile rollout, SemVer policy)

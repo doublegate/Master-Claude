@@ -79,8 +79,8 @@ Keep these in the project's own stub, not here:
 
 ## Sources
 
-- `/home/parobek/Code/OSS_Public-Projects/ProRT-IP/AGENTS.md` (Build/Test commands, Testing guidelines, fuzz)
-- `/home/parobek/Code/OSS_Public-Projects/RustyNES/CLAUDE.md` (Quality gates, hot-path/profile rules)
-- `/home/parobek/Code/OSS_Public-Projects/ProRT-IP/CLAUDE.md` (coverage bars, weekly audit, performance notes)
-- `/home/parobek/.claude/CLAUDE.md` (CI/CD best practices, profile-before-optimizing)
-- `/home/parobek/Code/CLAUDE.md` (workspace testing patterns)
+- `~/Code/OSS_Public-Projects/ProRT-IP/AGENTS.md` (Build/Test commands, Testing guidelines, fuzz)
+- `~/Code/OSS_Public-Projects/RustyNES/CLAUDE.md` (Quality gates, hot-path/profile rules)
+- `~/Code/OSS_Public-Projects/ProRT-IP/CLAUDE.md` (coverage bars, weekly audit, performance notes)
+- `~/.claude/CLAUDE.md` (CI/CD best practices, profile-before-optimizing)
+- `~/Code/CLAUDE.md` (workspace testing patterns)

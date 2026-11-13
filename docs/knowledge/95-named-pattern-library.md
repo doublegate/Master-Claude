@@ -95,8 +95,8 @@ Keep these in the project's own stub, not here:
 
 ## Sources
 
-- `/home/parobek/Code/OSS_Public-Projects/Bazzite-Config/CLAUDE.md` (named patterns with explicit problem/solution/rationale: context-aware validation, transaction state, progressive-with-rollback, selective restore)
-- `/home/parobek/Code/OSS_Public-Projects/VeridianOS/CLAUDE.md` (GlobalState single-owner pattern, feature-flag/cfg gating, static-mut elimination with justified exceptions)
-- `/home/parobek/Code/Local_Only-Projects/mc-seed-finder/CLAUDE.md` (golden-vector parity, exactness flag discipline)
-- `/home/parobek/Code/Master-Claude/AGENTS.md` (read-before-write, dry-run-first, managed-block distribution model)
-- `/home/parobek/.claude/CLAUDE.md` (read-before-write mandate, additive-feature defaults)
+- `~/Code/OSS_Public-Projects/Bazzite-Config/CLAUDE.md` (named patterns with explicit problem/solution/rationale: context-aware validation, transaction state, progressive-with-rollback, selective restore)
+- `~/Code/OSS_Public-Projects/VeridianOS/CLAUDE.md` (GlobalState single-owner pattern, feature-flag/cfg gating, static-mut elimination with justified exceptions)
+- `~/Code/Local_Only-Projects/<private>/CLAUDE.md` (golden-vector parity, exactness flag discipline)
+- `~/Code/Master-Claude/AGENTS.md` (read-before-write, dry-run-first, managed-block distribution model)
+- `~/.claude/CLAUDE.md` (read-before-write mandate, additive-feature defaults)
