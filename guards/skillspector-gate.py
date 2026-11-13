@@ -903,6 +903,16 @@ def evaluate(
                     f"{MAX_SKILLS}; install them one at a time with --skill"
                 )
                 continue
+            root_digest = None
+            if bindings is not None and t["kind"] == "git":
+                # Bind the whole cloned tree, not just the skills found in it: a second
+                # fetch that adds a skill (or changes any file a skill uses) must not verify.
+                try:
+                    root_digest = tree_hash(root)
+                except GateError:
+                    root_digest = (
+                        None  # too large to bind whole; skills are still checked
+                    )
             for d in skills:
                 digest = tree_hash(d)
                 label = f"{t['source']}{'' if d == root else ' :: ' + d.name}"
@@ -915,6 +925,13 @@ def evaluate(
                             "rel": "" if d == root else d.relative_to(root).as_posix(),
                             "name": skill_name(d) or d.name,
                             "digest": digest,
+                            "root_digest": root_digest,
+                            "inventory": sorted(
+                                "" if x == root else x.relative_to(root).as_posix()
+                                for x in find_skills(root, None)
+                            )
+                            if t["kind"] == "git"
+                            else [],
                         }
                     )
                 if digest in approvals:
@@ -954,17 +971,32 @@ def max_dec(a: str, b: str) -> str:
 # --- agent protocols -------------------------------------------------------------------
 
 
+# Identity of the tool invocation, used to pair a pre-install record with its own
+# post-install check: {"session": ..., "call": ...}; values may be empty.
+LAST_IDS: dict[str, str] = {}
+
+
 def read_payload(agent: str) -> tuple[str, Path, str | None]:
     """Return (command, cwd, permission_mode). permission_mode is None when the agent
-    does not report one."""
+    does not report one. Also sets LAST_IDS (session / tool-call ids, when reported)."""
     data = json.loads(sys.stdin.read() or "{}")
     if agent == "agy":
         call = data.get("toolCall") or {}
+        LAST_IDS.clear()
+        LAST_IDS.update(
+            session=str(data.get("conversationId") or data.get("sessionId") or ""),
+            call=str(call.get("id") or ""),
+        )
         if call.get("name") != "run_command":
             return "", HOME, None
         args = call.get("args") or {}
         ws = (data.get("workspacePaths") or [str(HOME)])[0]
         return str(args.get("CommandLine") or ""), Path(args.get("Cwd") or ws), None
+    LAST_IDS.clear()
+    LAST_IDS.update(
+        session=str(data.get("session_id") or ""),
+        call=str(data.get("tool_use_id") or ""),
+    )
     ti = data.get("tool_input") or {}
     cmd = ti.get("command") or ""
     if isinstance(cmd, list):
@@ -1063,15 +1095,59 @@ def command_key(command: str) -> str:
     return hashlib.sha256(command.strip().encode()).hexdigest()
 
 
+def _entries(value) -> list[dict]:
+    return (
+        value if isinstance(value, list) else [value] if isinstance(value, dict) else []
+    )
+
+
 def record_pending(command: str, cwd: Path, bindings: list[dict]) -> None:
-    """Remember what was scanned for this exact command, for the post-install check."""
+    """Remember what was scanned for this exact command, for the post-install check.
+    Entries are a list per command and carry the invocation identity, so the same command
+    run concurrently in two sessions or workspaces keeps two independent checks."""
     if not bindings:
         return
     pending = load_json(PENDING_FILE)
     now = time.time()
-    pending = {k: v for k, v in pending.items() if now - v.get("at", 0) < PENDING_TTL}
-    pending[command_key(command)] = {"at": now, "cwd": str(cwd), "items": bindings}
+    pending = {
+        k: kept
+        for k, v in pending.items()
+        if (kept := [e for e in _entries(v) if now - e.get("at", 0) < PENDING_TTL])
+    }
+    entry = {
+        "at": now,
+        "cwd": str(cwd),
+        "session": LAST_IDS.get("session", ""),
+        "call": LAST_IDS.get("call", ""),
+        "items": bindings,
+    }
+    pending.setdefault(command_key(command), []).append(entry)
     save_json(PENDING_FILE, pending)
+
+
+def take_pending(command: str, cwd: Path) -> dict | None:
+    """Remove and return the pre-install record that belongs to this invocation: same tool
+    call id, else same session and cwd, else same cwd, else the oldest."""
+    pending = load_json(PENDING_FILE)
+    key = command_key(command)
+    entries = _entries(pending.get(key))
+    if not entries:
+        return None
+    sid, call, where = LAST_IDS.get("session", ""), LAST_IDS.get("call", ""), str(cwd)
+    rules = (
+        lambda e: bool(call) and e.get("call") == call,
+        lambda e: bool(sid) and e.get("session") == sid and e.get("cwd") == where,
+        lambda e: e.get("cwd") == where,
+        lambda e: True,
+    )
+    chosen = next((e for rule in rules for e in entries if rule(e)), entries[0])
+    entries.remove(chosen)
+    if entries:
+        pending[key] = entries
+    else:
+        pending.pop(key, None)
+    save_json(PENDING_FILE, pending)
+    return chosen
 
 
 def skills_dirs(cwd: Path) -> list[Path]:
@@ -1126,14 +1202,58 @@ def post(agent: str) -> int:
         return 0
     if not command:
         return 0
-    pending = load_json(PENDING_FILE)
-    entry = pending.pop(command_key(command), None)
+    entry = take_pending(command, cwd)
     if entry is None:
         return 0
-    save_json(PENDING_FILE, pending)
     since = entry.get("at", 0)
+    where = Path(entry.get("cwd") or cwd)
     bad, unverified, sources = [], [], []
+
+    def reject(label: str, root: Path, why: str) -> None:
+        try:
+            moved = quarantine(root)
+            bad.append(f"{label}: {why}; moved to {moved}")
+        except OSError as exc:
+            bad.append(
+                f"{label}: {why} and could not be quarantined ({exc}); remove {root} by hand"
+            )
+
+    # git clones: the whole installed tree must equal the scanned tree, so an added skill or
+    # any changed file fails, not only a changed scanned skill.
+    done: set[str] = set()
     for item in entry.get("items", []):
+        dest = item.get("dest")
+        if item["kind"] != "git" or not dest or dest in done:
+            continue
+        done.add(dest)
+        root = Path(dest)
+        if not root.exists():
+            unverified.append(item["source"])
+            continue
+        if item.get("root_digest"):
+            try:
+                same = tree_hash(root) == item["root_digest"]
+            except (GateError, OSError):
+                same = False
+            if not same:
+                reject(
+                    item["source"], root, "installed tree differs from what was scanned"
+                )
+        else:  # tree too large to bind whole: at least the skill inventory must match
+            got = sorted(
+                "" if x == root else x.relative_to(root).as_posix()
+                for x in find_skills(root, None)
+            )
+            if got != item.get("inventory", got):
+                reject(
+                    item["source"], root, "installed skills differ from the scanned set"
+                )
+    items = [
+        i
+        for i in entry.get("items", [])
+        if not (i["kind"] == "git" and i.get("dest") in done)
+    ]
+    for item in items:
         label = item["source"] + (f" :: {item['name']}" if item.get("rel") else "")
         sources.append(label)
         try:
@@ -1149,15 +1269,26 @@ def post(agent: str) -> int:
             got = None
         if got == item["digest"]:
             continue
-        try:
-            moved = quarantine(root)
-            bad.append(
-                f"{label}: installed content differs from what was scanned; moved to {moved}"
-            )
-        except OSError as exc:
-            bad.append(
-                f"{label}: installed content differs from what was scanned and could not be quarantined ({exc}); remove {root} by hand"
-            )
+        reject(label, root, "installed content differs from what was scanned")
+    # `skills add`: a skill that appeared in the skills dirs during this install but was not
+    # among the scanned ones is an unscanned addition (fail safe: quarantined, reported).
+    names = {i["name"] for i in entry.get("items", []) if i["kind"] != "git"}
+    if names:
+        for sd in skills_dirs(where):
+            for d in sd.iterdir():
+                if not d.is_dir() or not (d / "SKILL.md").is_file():
+                    continue
+                if d.name in names or skill_name(d) in names:
+                    continue
+                if d.stat().st_mtime >= since - 5:
+                    reject(
+                        str(d),
+                        d,
+                        "skill appeared during this install but was not scanned",
+                    )
+    sources += sorted(
+        {i["source"] for i in entry.get("items", []) if i["kind"] == "git"}
+    )
     if bad:
         audit(agent, mode, "quarantined", sources)
         reason = (
