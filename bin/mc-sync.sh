@@ -54,6 +54,9 @@ else
   "$SCRIPT_DIR/mc-install.sh" "$PROJECT" --lang "$LANG" "$MODE"
 fi
 
-# Keep Antigravity's global copy of the core current too (only refreshes an existing block;
-# it never creates one — that is an explicit `mc-agy.sh install`).
-"$SCRIPT_DIR/mc-agy.sh" install --if-present -q
+# Keep Antigravity's global copy of the core current too (only refreshes an existing
+# plugin; it never creates one — that is an explicit `mc-agy.sh install`). A failure here
+# must not fail the project sync that already succeeded: report it instead.
+if ! "$SCRIPT_DIR/mc-agy.sh" install --if-present -q; then
+  printf 'mc-sync: warning: could not refresh the Antigravity plugin; run mc-agy.sh install to see why\n' >&2
+fi

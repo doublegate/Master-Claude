@@ -99,7 +99,12 @@ All notable changes to this project are documented here. The format is based on
       rules all loaded in full.
 
     Size options `--full` (default), `--modules L|none` and `--no-memory` (about 40 → 9 KB)
-    are stamped, so `verify` and sync keep them. Installs are idempotent; a foreign plugin at
+    are stamped, so `verify` and sync keep them. Every refresh and every uninstall first backs
+    the plugin up to `~/.gemini/config/master-claude.plugin.mc-bak/`. That is outside
+    `plugins/` on purpose, because a copy inside it would load as a second plugin; a failed
+    copy is restored from the backup. The `--if-present` no-op and `uninstall` are decided
+    before the core is generated, so they never depend on the byte budget, and `mc-sync`
+    only warns if the plugin refresh fails. Installs are idempotent; a foreign plugin at
     the path is never overwritten; and a legacy `MC-CORE` block in the global `GEMINI.md`,
     from the first iteration, is migrated away with a backup. `MC_AGY_PLUGIN_DIR` and
     `MC_AGY_FILE` override the paths.
@@ -118,7 +123,7 @@ All notable changes to this project are documented here. The format is based on
   - Docs: `tri-agent-interop.md` (agents table, verification notes, parity matrix, memory,
     public-repo guidance), `distribution-model.md`, `00-OVERVIEW.md`, `AGENTS.md`,
     `commands/mc-setup.md`, and the `mc-install.sh` help text.
-- `test/run.sh`: 56 new checks (9 import-path, 6 Antigravity bridge/apply, 41 `mc-agy.sh`).
+- `test/run.sh`: 63 new checks (9 import-path, 6 Antigravity bridge/apply, 48 `mc-agy.sh`).
   - Import paths: the default is `@~/` with no `$HOME` in `AGENTS.md`;
     `--absolute-imports` writes and stamps the expanded path, and sync keeps it; doctor
     accepts a stamped file and warns on an unstamped one; sync converts legacy files and
@@ -126,7 +131,9 @@ All notable changes to this project are documented here. The format is based on
   - Antigravity: the mem-bridge dry-run writes nothing, `--execute` writes the digest, the
     printed instruction says to read the file, and unknown targets are refused; an `.agents/`
     project is installed inline, with no `@import` lines.
-  - `mc-agy.sh` (41 checks, sandboxed through `MC_AGY_PLUGIN_DIR`/`MC_AGY_FILE`):
+  - `mc-agy.sh` (48 checks, sandboxed through `MC_AGY_PLUGIN_DIR`/`MC_AGY_FILE`; includes
+    backups outside `plugins/`, budget-independent no-op and uninstall, and mc-sync
+    surviving a failed refresh):
     - install and verify, dry-run, idempotency, valid `plugin.json`, every module present,
       the two-file split under the cap, and the global `GEMINI.md` untouched;
     - refusing an oversized core, refusing to clobber a foreign plugin, migrating the legacy

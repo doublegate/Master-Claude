@@ -181,6 +181,22 @@ checkn "agy: verify flags a legacy global block" "$AGY" verify -q
 checkn "agy: install migrates the legacy block away" grep -q 'MC-CORE' "$MC_AGY_FILE"
 check  "agy: migration keeps the user's text" grep -qx 'KEEP-ME-123' "$MC_AGY_FILE"
 check  "agy: migration backs up the global file" grep -q 'MC-CORE' "$MC_AGY_FILE.mc-bak"
+# backups: a refresh and an uninstall keep the previous plugin, outside plugins/ so agy
+# never loads it as a second plugin
+AGY_BAK="$(dirname -- "$(dirname -- "$MC_AGY_PLUGIN_DIR")")/master-claude.plugin.mc-bak"
+"$AGY" install -q --modules 10
+check  "agy: refresh backs up the previous (full) plugin" sh -c "cat '$AGY_BAK'/rules/* | grep -q '^# 30 —'"
+checkn "agy: the refreshed plugin is the new (slim) one" sh -c "cat '$MC_AGY_PLUGIN_DIR'/rules/* | grep -q '^# 30 —'"
+checkn "agy: the backup is not inside plugins/" test -e "$(dirname -- "$MC_AGY_PLUGIN_DIR")/master-claude.plugin.mc-bak"
+"$AGY" install -q --full
+# the no-op and uninstall paths must not depend on the core fitting the budget
+"$AGY" uninstall -q
+check  "agy: uninstall backs up the plugin" test -f "$AGY_BAK/plugin.json"
+check  "agy: --if-present no-op ignores the byte budget" env MC_AGY_MAX_BYTES=4000 "$AGY" install --if-present -q
+"$AGY" install -q --full
+check  "agy: uninstall works even when the core no longer fits" env MC_AGY_MAX_BYTES=4000 "$AGY" uninstall -q
+"$AGY" install -q --full
+check  "agy: mc-sync survives a failing plugin refresh" env MC_AGY_MAX_BYTES=4000 "$BIN/mc-sync.sh" "$DP"
 "$AGY" uninstall -q
 checkn "agy: uninstall removes the plugin" test -e "$MC_AGY_PLUGIN_DIR"
 "$AGY" install --if-present -q
