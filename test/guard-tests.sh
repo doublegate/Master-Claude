@@ -56,6 +56,8 @@ wallow(){ if [ -n "$(wout "$2")" ]; then no "$1"; else ok "$1"; fi; }
 wdeny  "guard-write: settings.json blocked" "$SBROOT/p/.claude/settings.json"
 wdeny  "guard-write: .git internals blocked" "$SBROOT/p/.git/config"
 wdeny  "guard-write: .env blocked" "$SBROOT/p/.env"
+wdeny  "guard-write: SkillSpector approvals blocked" "$SBROOT/h/.config/skillspector/gate-approvals.json"
+wdeny  "guard-write: SkillSpector verdict cache blocked" "$SBROOT/h/.cache/skillspector-gate/verdicts.json"
 wallow "guard-write: ordinary source file allowed" "$SBROOT/p/src/main.rs"
 
 # --- 16. mc-guard install is idempotent and preserves foreign hooks ----------

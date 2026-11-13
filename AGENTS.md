@@ -39,12 +39,16 @@ CLI), plus the tooling to install and keep that knowledge in sync inside any pro
 ## Build / verify
 
 - Shell lint: `shellcheck --severity=warning bin/*.sh guards/*.sh test/*.sh`
-- Markdown lint: `npx markdownlint-cli2@0.23.1 "**/*.md"` (config + per-rule rationale in
+- Markdown lint: `npx markdownlint-cli2@0.24.0 "**/*.md"` (config + per-rule rationale in
   `.markdownlint.json`; pin the version — an unpinned newer linter reports ungated rules).
 - Self-tests: `sh test/run.sh` (sandboxed: install/symlinks/idempotency/seed/trim/state/
   retrofit-safety/self-guard, plus the guard behavior groups 13-20). CI
   (`.github/workflows/ci.yml`) runs shell lint + workflow lint + markdown lint + tests + the
   <200-line curation guard on every push.
+- SkillSpector gate tests: `python3 -m unittest discover -s test -p 'test_skillspector_gate.py'`
+  (stdlib only, SkillSpector mocked; a separate CI step, since `test/run.sh` covers only the
+  shell guards. Not `-m unittest test/...`: Pythons that ship the stdlib `test` package
+  resolve that name to it).
 - Slash commands live in `commands/`, subagents in `agents/`; register with
   `bin/mc-commands.sh --global` and `bin/mc-commands.sh --agents` so they resolve (Claude Code
   only scans `~/.claude/commands` and `~/.claude/agents`, not this repo).

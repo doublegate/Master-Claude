@@ -77,8 +77,8 @@ Keep these in the project's own stub, not here:
 
 ## Sources
 
-- `/home/parobek/Code/OSS_Public-Projects/RustyNES/CLAUDE.md` (Workflow conventions)
-- `/home/parobek/Code/OSS_Public-Projects/ProRT-IP/AGENTS.md` (Commit & PR guidelines)
-- `/home/parobek/Code/OSS_Public-Projects/ProRT-IP/CLAUDE.md` (Release standards)
-- `/home/parobek/Code/CLAUDE.md` (workspace conventions)
-- `/home/parobek/.claude/CLAUDE.md` (Conventional Commits, never-commit-unless-asked)
+- `~/Code/OSS_Public-Projects/RustyNES/CLAUDE.md` (Workflow conventions)
+- `~/Code/OSS_Public-Projects/ProRT-IP/AGENTS.md` (Commit & PR guidelines)
+- `~/Code/OSS_Public-Projects/ProRT-IP/CLAUDE.md` (Release standards)
+- `~/Code/CLAUDE.md` (workspace conventions)
+- `~/.claude/CLAUDE.md` (Conventional Commits, never-commit-unless-asked)

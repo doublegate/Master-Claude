@@ -88,9 +88,9 @@ release-time cleanup.
 
 ## Sources
 
-- /home/parobek/Code/OSS_Public-Projects/ProRT-IP/AGENTS.md (phases/sprints, metrics snapshot)
-- /home/parobek/Code/OSS_Public-Projects/ProRT-IP/.claude/commands/sprint-start.md
-- /home/parobek/Code/OSS_Public-Projects/ProRT-IP/.claude/commands/sprint-complete.md
-- /home/parobek/Code/OSS_Public-Projects/ProRT-IP/.claude/commands/phase-complete.md
-- /home/parobek/Code/OSS_Public-Projects/AirGapSync/docs/PROJECT-STATUS.md
-- /home/parobek/Code/OSS_Public-Projects/RustyNES/CLAUDE.md (ROADMAP as planning entry, ticket IDs)
+- ~/Code/OSS_Public-Projects/ProRT-IP/AGENTS.md (phases/sprints, metrics snapshot)
+- ~/Code/OSS_Public-Projects/ProRT-IP/.claude/commands/sprint-start.md
+- ~/Code/OSS_Public-Projects/ProRT-IP/.claude/commands/sprint-complete.md
+- ~/Code/OSS_Public-Projects/ProRT-IP/.claude/commands/phase-complete.md
+- ~/Code/OSS_Public-Projects/AirGapSync/docs/PROJECT-STATUS.md
+- ~/Code/OSS_Public-Projects/RustyNES/CLAUDE.md (ROADMAP as planning entry, ticket IDs)
