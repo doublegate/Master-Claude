@@ -85,5 +85,15 @@ else
 fi
 [ "$gbad" -eq 0 ] && ok "enforcement layer intact (guards executable, rule files valid)"
 
+# 9. no absolute home paths: they leak a username into this public repository. Test
+# fixtures (test/) use made-up homes such as /home/u on purpose.
+if command -v git >/dev/null 2>&1 && git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+  leaks=$(git -C "$REPO" grep -n -I -E '/Users/[A-Za-z]|/home/[a-z][a-z0-9_-]*/' -- ':!test/' 2>/dev/null || true)
+  if [ -n "$leaks" ]; then
+    fail "absolute home paths in tracked files (use ~/ or a placeholder):"
+    printf '%s\n' "$leaks" | sed 's/^/           /'
+  else ok "no absolute home paths in tracked files"; fi
+fi
+
 printf 'mc-selfcheck: %d failure(s)\n' "$fails"
 [ "$fails" -eq 0 ]

@@ -11,7 +11,15 @@ SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 SELF_REPO=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 ROOT="$HOME/Code"
 SHOW_ALL=0
-SKIP="Archive Backups Dev_Test docs HPC_User_Forum metasploitable3-workspace Resume_Personal-Parobek Rust_Test Master-Claude Undertow node_modules target vendor .venv .git .bmad-core gpu-burn-git"
+SKIP="Archive Backups Dev_Test docs Rust_Test Master-Claude node_modules target vendor .venv .git"
+# Personal names to skip (one or more per line, # comments allowed) live OUTSIDE the
+# repository, so this public script carries no user-specific folder names:
+#   ${MC_SKIP_FILE:-~/.config/master-claude/skip}, plus space-separated $MC_SKIP.
+SKIP_FILE="${MC_SKIP_FILE:-$HOME/.config/master-claude/skip}"
+if [ -f "$SKIP_FILE" ]; then
+  SKIP="$SKIP $(sed 's/#.*//' "$SKIP_FILE" | tr '\n' ' ')"
+fi
+SKIP="$SKIP ${MC_SKIP:-}"
 
 while [ $# -gt 0 ]; do
   case "$1" in

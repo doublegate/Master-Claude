@@ -94,6 +94,19 @@ checkn "mem-bridge dry-run wrote nothing" test -f "$BH/master-memory.md"
 "$BIN/mc-mem-bridge.sh" --only codex --codex-home "$BH" --execute >/dev/null 2>&1 || true
 check "mem-bridge --execute writes digest" test -f "$BH/master-memory.md"
 
+# --- 12d. personal skip names come from outside the repo -------------------------
+WS="$SBROOT/workspace"; mkdir -p "$WS"
+for p in keepme skipfile skipenv; do
+  mkdir -p "$WS/$p"; printf '[package]\nname="t"\n' > "$WS/$p/Cargo.toml"
+  "$BIN/mc-install.sh" "$WS/$p" >/dev/null
+done
+printf '# comment\nskipfile\n' > "$SBROOT/mc-skip"
+DA=$(MC_SKIP_FILE="$SBROOT/mc-skip" MC_SKIP=skipenv "$BIN/mc-doctor-all.sh" "$WS" 2>&1 || true)
+if printf '%s' "$DA" | grep -q keepme; then ok "doctor-all audits unskipped projects"; else no "doctor-all keepme"; fi
+if printf '%s' "$DA" | grep -q skipfile; then no "doctor-all honours MC_SKIP_FILE"; else ok "doctor-all honours MC_SKIP_FILE"; fi
+if printf '%s' "$DA" | grep -q skipenv; then no "doctor-all honours MC_SKIP"; else ok "doctor-all honours MC_SKIP"; fi
+checkn "skip lists carry no personal folder names" grep -q 'Resume_Personal' "$BIN/mc-apply-all.sh" "$BIN/mc-doctor-all.sh"
+
 # --- 13-20. guards regression suite -----------------------------------------
 GUARDS="$REPO/guards"
 export GB="$GUARDS/guard-bash.sh"

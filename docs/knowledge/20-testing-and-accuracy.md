@@ -79,8 +79,8 @@ These belong in each project's own CLAUDE.md / testing-strategy doc, not in shar
 
 ## Sources
 
-- `/home/parobek/Code/OSS_Public-Projects/RustyNES/CLAUDE.md`
-- `/home/parobek/Code/OSS_Public-Projects/RustySNES/CLAUDE.md`
-- `/home/parobek/Code/Local_Only-Projects/mc-seed-finder/CLAUDE.md`
-- `/home/parobek/Code/Commercial_Private-Projects/lobe-chat/CLAUDE.md`
-- `/home/parobek/Code/OSS_Public-Projects/VeridianOS/CLAUDE.md`
+- `~/Code/OSS_Public-Projects/RustyNES/CLAUDE.md`
+- `~/Code/OSS_Public-Projects/RustySNES/CLAUDE.md`
+- `~/Code/Local_Only-Projects/<private>/CLAUDE.md`
+- `~/Code/Commercial_Private-Projects/<private>/CLAUDE.md`
+- `~/Code/OSS_Public-Projects/VeridianOS/CLAUDE.md`

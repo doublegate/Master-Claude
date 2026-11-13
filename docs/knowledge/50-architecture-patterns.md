@@ -92,8 +92,8 @@ layering, Python typed exceptions + SQLite WAL — live in the language overlays
 
 ## Sources
 
-- `/home/parobek/Code/OSS_Public-Projects/RustyNES/CLAUDE.md`
-- `/home/parobek/Code/OSS_Public-Projects/RustySNES/CLAUDE.md`
-- `/home/parobek/Code/Commercial_Private-Projects/PFAS/CLAUDE.md`
-- `/home/parobek/Code/Commercial_Private-Projects/lobe-chat/CLAUDE.md`
-- `/home/parobek/Code/OSS_Public-Projects/VeridianOS/CLAUDE.md`
+- `~/Code/OSS_Public-Projects/RustyNES/CLAUDE.md`
+- `~/Code/OSS_Public-Projects/RustySNES/CLAUDE.md`
+- `~/Code/Commercial_Private-Projects/<private>/CLAUDE.md`
+- `~/Code/Commercial_Private-Projects/<private>/CLAUDE.md`
+- `~/Code/OSS_Public-Projects/VeridianOS/CLAUDE.md`
