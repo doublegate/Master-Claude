@@ -18,13 +18,15 @@ All notable changes to this project are documented here. The format is based on
     after 24 h. Each command holds a list of records tagged with the session id, tool-call id
     and cwd, so the same command run concurrently in two sessions or workspaces keeps two
     independent checks; the post hook takes the record for its own tool call (falling back to
-    session + cwd, then cwd).
+    session + cwd, then cwd). Each target also keeps its effective cwd, so
+    `cd /project && npx skills add …` is checked in `/project`'s skills dirs.
   - The new `skillspector-gate.py post --agent …` (`PostToolUse`) hashes what was actually
     installed. A `git clone` must match the whole scanned tree (minus `.git`), so a second
     fetch that adds a skill or changes any helper file fails, not only a changed scanned skill.
-    A `skills add` skill is found by name in the agent skills dirs, newest since the scan, and
-    any other skill that appeared there during the install was not scanned and is quarantined
-    too.
+    A clone too large to hash whole must match the scanned skill inventory and each skill's
+    digest. A `skills add` skill is found by name in the agent skills dirs; the pre-install
+    hook snapshots those dirs, and any other skill dir that is new since the snapshot, was not
+    scanned and is not expected by another pending gated install is quarantined too.
   - On a mismatch the install is moved to `~/.cache/skillspector-gate/quarantine/` and Claude
     gets `decision: block` with the reason. If the skill cannot be found it is reported as
     unverified, never as a match.
@@ -32,10 +34,12 @@ All notable changes to this project are documented here. The format is based on
   - `bin/mc-guard.sh` registers the post hook (`PostToolUse`, Bash, 120 s) on `install`,
     verifies it, and removes only that entry on `uninstall`, keeping foreign `PostToolUse`
     hooks.
-  - Tests: 16 new gate tests: match verified; git and `skills add` mismatches quarantined;
+  - Tests: 20 new gate tests: match verified; git and `skills add` mismatches quarantined;
     a clone with an added skill or a changed helper file quarantined; an unscanned extra skill
     from `skills add` quarantined while the scanned one and older skills stay; concurrent and
-    id-less records paired correctly; legacy pending files read; missing install unverified;
+    id-less records paired correctly; legacy pending files read; an oversized clone keeps
+    per-skill checks; recently touched existing skills and another pending install's skill are
+    left alone; `cd … && skills add` checked in the target project; missing install unverified;
     denied and local installs record nothing; unrelated commands ignored; the pending file is
     protected. They also redirect `PENDING_FILE` and
     `QUARANTINE_DIR`, so no test touches the real cache. Guard tests cover registration,

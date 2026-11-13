@@ -416,7 +416,7 @@ def detect(command: str, cwd: Path) -> tuple[list[dict], str | None]:
         argv = strip_wrappers(words(sub))
         if not argv:
             continue
-        before = len(targets)
+        before, here = len(targets), cwd
         try:
             cwd, tamper = _detect_one(argv, cwd, targets, near)
         except Exception:  # noqa: BLE001 -- unparseable input fails closed below
@@ -425,6 +425,10 @@ def detect(command: str, cwd: Path) -> tuple[list[dict], str | None]:
             continue
         if tamper:
             return [], tamper
+        for t in targets[before:]:
+            # The effective cwd after any earlier `cd` in the chain: where a `skills add`
+            # installs, and so where the post-install check must look.
+            t.setdefault("cwd", str(here))
         if len(targets) == before and os.path.basename(argv[0]) not in BENIGN_IN_CHAIN:
             others.append(sub.strip())
     # The gate scans before the whole chain runs, so any other step can change a source,
@@ -922,6 +926,7 @@ def evaluate(
                             "kind": t["kind"],
                             "source": t["source"],
                             "dest": t.get("dest"),
+                            "cwd": t.get("cwd"),
                             "rel": "" if d == root else d.relative_to(root).as_posix(),
                             "name": skill_name(d) or d.name,
                             "digest": digest,
@@ -1114,9 +1119,20 @@ def record_pending(command: str, cwd: Path, bindings: list[dict]) -> None:
         for k, v in pending.items()
         if (kept := [e for e in _entries(v) if now - e.get("at", 0) < PENDING_TTL])
     }
+    # Snapshot what already exists in the skills dirs a `skills add` may write to, so the
+    # post check can tell this install's additions from skills that were already there.
+    where = {b.get("cwd") or str(cwd) for b in bindings if b["kind"] != "git"}
+    before = sorted(
+        str(d)
+        for w in where
+        for sd in skills_dirs(Path(w))
+        for d in sd.iterdir()
+        if d.is_dir()
+    )
     entry = {
         "at": now,
         "cwd": str(cwd),
+        "before": before,
         "session": LAST_IDS.get("session", ""),
         "call": LAST_IDS.get("call", ""),
         "items": bindings,
@@ -1160,14 +1176,16 @@ def skills_dirs(cwd: Path) -> list[Path]:
     return out
 
 
-def locate(item: dict, cwd: Path, since: float) -> tuple[Path | None, Path | None]:
+def locate(
+    item: dict, cwd: Path, since: float, before: set[str] | None = None
+) -> tuple[Path | None, Path | None]:
     """(installed skill dir, install root to quarantine) for one scanned skill."""
     if item["kind"] == "git" and item.get("dest"):
         root = Path(item["dest"])
         skill = root / item["rel"] if item["rel"] else root
         return (skill, root) if skill.exists() else (None, None)
     # `skills add` picks its own destination: find the skill by name, newest first,
-    # installed no earlier than the scan.
+    # new since the pre-install snapshot or modified no earlier than the scan.
     name, found = item["name"], []
     for sd in skills_dirs(cwd):
         for d in sd.iterdir():
@@ -1175,7 +1193,7 @@ def locate(item: dict, cwd: Path, since: float) -> tuple[Path | None, Path | Non
                 continue
             if d.name == name or skill_name(d) == name:
                 mt = d.stat().st_mtime
-                if mt >= since - 5:
+                if mt >= since - 5 or (before is not None and str(d) not in before):
                     found.append((mt, d))
     if not found:
         return None, None
@@ -1206,7 +1224,8 @@ def post(agent: str) -> int:
     if entry is None:
         return 0
     since = entry.get("at", 0)
-    where = Path(entry.get("cwd") or cwd)
+    base = Path(entry.get("cwd") or cwd)
+    before = set(entry["before"]) if isinstance(entry.get("before"), list) else None
     bad, unverified, sources = [], [], []
 
     def reject(label: str, root: Path, why: str) -> None:
@@ -1219,32 +1238,35 @@ def post(agent: str) -> int:
             )
 
     # git clones: the whole installed tree must equal the scanned tree, so an added skill or
-    # any changed file fails, not only a changed scanned skill.
+    # any changed file fails, not only a changed scanned skill. `done` holds the clones
+    # settled here; a clone too large to hash whole keeps its per-skill checks below.
+    seen: set[str] = set()
     done: set[str] = set()
     for item in entry.get("items", []):
         dest = item.get("dest")
-        if item["kind"] != "git" or not dest or dest in done:
+        if item["kind"] != "git" or not dest or dest in seen:
             continue
-        done.add(dest)
+        seen.add(dest)
         root = Path(dest)
         if not root.exists():
-            unverified.append(item["source"])
-            continue
+            continue  # reported unverified by the per-skill loop
         if item.get("root_digest"):
             try:
                 same = tree_hash(root) == item["root_digest"]
             except (GateError, OSError):
                 same = False
+            done.add(dest)
             if not same:
                 reject(
                     item["source"], root, "installed tree differs from what was scanned"
                 )
-        else:  # tree too large to bind whole: at least the skill inventory must match
+        else:  # too large to bind whole: the skill inventory must match, then each skill
             got = sorted(
                 "" if x == root else x.relative_to(root).as_posix()
                 for x in find_skills(root, None)
             )
             if got != item.get("inventory", got):
+                done.add(dest)
                 reject(
                     item["source"], root, "installed skills differ from the scanned set"
                 )
@@ -1257,7 +1279,7 @@ def post(agent: str) -> int:
         label = item["source"] + (f" :: {item['name']}" if item.get("rel") else "")
         sources.append(label)
         try:
-            installed, root = locate(item, Path(entry.get("cwd") or cwd), since)
+            installed, root = locate(item, Path(item.get("cwd") or base), since, before)
         except OSError:
             installed, root = None, None
         if installed is None or root is None:
@@ -1270,22 +1292,31 @@ def post(agent: str) -> int:
         if got == item["digest"]:
             continue
         reject(label, root, "installed content differs from what was scanned")
-    # `skills add`: a skill that appeared in the skills dirs during this install but was not
-    # among the scanned ones is an unscanned addition (fail safe: quarantined, reported).
-    names = {i["name"] for i in entry.get("items", []) if i["kind"] != "git"}
-    if names:
-        for sd in skills_dirs(where):
-            for d in sd.iterdir():
-                if not d.is_dir() or not (d / "SKILL.md").is_file():
+    # `skills add`: a skill dir absent from the pre-install snapshot and not among the
+    # scanned skills is an unscanned addition (quarantined, reported). Skills that another
+    # pending gated install is expecting are left for that install's own check.
+    spec = [i for i in entry.get("items", []) if i["kind"] != "git"]
+    names = {i["name"] for i in spec}
+    if spec and before is not None:
+        expected = {
+            i.get("name")
+            for v in load_json(PENDING_FILE).values()
+            for e in _entries(v)
+            for i in e.get("items", [])
+        }
+        dirs = {sd for i in spec for sd in skills_dirs(Path(i.get("cwd") or base))}
+        for sd in sorted(dirs):
+            for d in sorted(sd.iterdir()):
+                if str(d) in before or not d.is_dir():
                     continue
-                if d.name in names or skill_name(d) in names:
+                if not (d / "SKILL.md").is_file():
                     continue
-                if d.stat().st_mtime >= since - 5:
-                    reject(
-                        str(d),
-                        d,
-                        "skill appeared during this install but was not scanned",
-                    )
+                n = skill_name(d)
+                if d.name in names or n in names or d.name in expected or n in expected:
+                    continue
+                reject(
+                    str(d), d, "skill appeared during this install but was not scanned"
+                )
     sources += sorted(
         {i["source"] for i in entry.get("items", []) if i["kind"] == "git"}
     )
