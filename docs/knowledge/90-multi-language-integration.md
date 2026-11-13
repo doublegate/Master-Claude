@@ -59,8 +59,8 @@ Keep these in the project's own stub, not here:
 
 ## Sources
 
-- `/home/parobek/Code/Local_Only-Projects/mc-seed-finder/CLAUDE.md` (FFI to vendored C, Python↔Rust parity, golden vectors, exactness flag, feature flags, stdout/stderr contract, stdlib-only core)
-- `/home/parobek/Code/Local_Only-Projects/mc-seed-finder/GEMINI.md` (per-language conventions)
-- `/home/parobek/Code/OSS_Public-Projects/SPECTRE/CLAUDE.md` (multi-crate workspace, Rust+TS+Docker, protobuf data pipeline, per-language standards, platform test scripts)
-- `/home/parobek/Code/OSS_Public-Projects/VeridianOS/CLAUDE.md` (conditional compilation by arch, cfg gating, C library shims)
-- `/home/parobek/Code/OSS_Public-Projects/ProRT-IP/CLAUDE.md` (typed output formats, cross-platform packet layer)
+- `~/Code/Local_Only-Projects/<private>/CLAUDE.md` (FFI to vendored C, Python↔Rust parity, golden vectors, exactness flag, feature flags, stdout/stderr contract, stdlib-only core)
+- `~/Code/Local_Only-Projects/<private>/GEMINI.md` (per-language conventions)
+- `~/Code/OSS_Public-Projects/SPECTRE/CLAUDE.md` (multi-crate workspace, Rust+TS+Docker, protobuf data pipeline, per-language standards, platform test scripts)
+- `~/Code/OSS_Public-Projects/VeridianOS/CLAUDE.md` (conditional compilation by arch, cfg gating, C library shims)
+- `~/Code/OSS_Public-Projects/ProRT-IP/CLAUDE.md` (typed output formats, cross-platform packet layer)

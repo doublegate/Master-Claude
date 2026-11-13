@@ -63,8 +63,8 @@ Keep these in the project's own stub, not here:
 
 ## Sources
 
-- `/home/parobek/Code/OSS_Public-Projects/ProRT-IP/CLAUDE.md` (Security Requirements: input validation, privilege drop, packet parsing, DoS prevention, audit)
-- `/home/parobek/Code/OSS_Public-Projects/VeridianOS/CLAUDE.md` (capability tokens, least privilege, IPC rate limiting)
-- `/home/parobek/Code/OSS_Public-Projects/SPECTRE/CLAUDE.md` (threat model, encryption, operational security, multi-platform test scripts)
-- `/home/parobek/Code/Commercial_Private-Projects/PhantomProtocol/docs/GEMINI.md` (periodic source audits)
-- `/home/parobek/.claude/CLAUDE.md` (security-conscious defaults, env vars, no sensitive info in errors)
+- `~/Code/OSS_Public-Projects/ProRT-IP/CLAUDE.md` (Security Requirements: input validation, privilege drop, packet parsing, DoS prevention, audit)
+- `~/Code/OSS_Public-Projects/VeridianOS/CLAUDE.md` (capability tokens, least privilege, IPC rate limiting)
+- `~/Code/OSS_Public-Projects/SPECTRE/CLAUDE.md` (threat model, encryption, operational security, multi-platform test scripts)
+- `~/Code/Commercial_Private-Projects/<private>/docs/GEMINI.md` (periodic source audits)
+- `~/.claude/CLAUDE.md` (security-conscious defaults, env vars, no sensitive info in errors)
