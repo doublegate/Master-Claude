@@ -58,6 +58,7 @@ wdeny  "guard-write: .git internals blocked" "$SBROOT/p/.git/config"
 wdeny  "guard-write: .env blocked" "$SBROOT/p/.env"
 wdeny  "guard-write: SkillSpector approvals blocked" "$SBROOT/h/.config/skillspector/gate-approvals.json"
 wdeny  "guard-write: SkillSpector verdict cache blocked" "$SBROOT/h/.cache/skillspector-gate/verdicts.json"
+wdeny  "guard-write: SkillSpector pending digests blocked" "$SBROOT/h/.cache/skillspector-gate/gate-pending.json"
 wallow "guard-write: ordinary source file allowed" "$SBROOT/p/src/main.rs"
 
 # --- 16. mc-guard install is idempotent and preserves foreign hooks ----------
@@ -69,6 +70,7 @@ check "mc-guard: guard-bash registered" grep -q 'guard-bash.sh' "$GS"
 check "mc-guard: guard-write registered" grep -q 'guard-write.sh' "$GS"
 check "mc-guard: deny rules merged" grep -q 'sed -i' "$GS"
 check "mc-guard: existing allow untouched" grep -q '"Bash"' "$GS"
+check "mc-guard: post-install verify hook registered" jq -e 'any(.hooks.PostToolUse[]; .matcher == "Bash" and any(.hooks[]; .command | test("skillspector-gate.py post")))' "$GS"
 B1=$(jq -S . "$GS")
 "$BIN/mc-guard.sh" install --settings "$GS" >/dev/null 2>&1
 B2=$(jq -S . "$GS")
@@ -79,6 +81,7 @@ check "mc-guard: verify passes after install" "$BIN/mc-guard.sh" verify --settin
 "$BIN/mc-guard.sh" uninstall --settings "$GS" >/dev/null 2>&1
 checkn "mc-guard: guard-bash removed" grep -q 'guard-bash.sh' "$GS"
 checkn "mc-guard: deny rules removed" grep -q 'sed -i' "$GS"
+checkn "mc-guard: post-install hook removed" grep -q 'skillspector-gate.py post' "$GS"
 check  "mc-guard: foreign hook survived uninstall" grep -q 'foreign-hook' "$GS"
 check  "mc-guard: settings still valid JSON" jq -e . "$GS"
 

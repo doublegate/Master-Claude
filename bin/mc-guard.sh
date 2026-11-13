@@ -48,6 +48,10 @@ DENY_FILE="$GUARDS/deny-rules.json"
 G_GATE="$GUARDS/skillspector-gate.py"
 G_GATE_CMD="$G_GATE hook --agent claude"
 G_GATE_TIMEOUT=900
+# Post-install check (PostToolUse): hashes what a remote install actually wrote and
+# quarantines it when it differs from what the gate scanned (issue #34). Hashing only.
+G_POST_CMD="$G_GATE post --agent claude"
+G_POST_TIMEOUT=120
 
 # Rule files for the security-guidance plugin. The plugin looks for these by exact name in
 # ~/.claude (user scope). Symlinked, not copied, so repo edits propagate like commands/ do.
@@ -93,22 +97,40 @@ def addgate($cmd; $timeout):
                    + [{type: "command", command: $cmd, timeout: $timeout,
                        statusMessage: "SkillSpector: scanning skill before install"}])
     else . end);
+def addpost($cmd; $timeout):
+  .hooks.PostToolUse = (
+    (.hooks.PostToolUse // [])
+    | if any(.[]; .matcher == "Bash")
+      then map(if .matcher == "Bash"
+               then .hooks = ((.hooks // []) | map(select(.command != $cmd))
+                              + [{type: "command", command: $cmd, timeout: $timeout,
+                                  statusMessage: "SkillSpector: verifying installed skill"}])
+               else . end)
+      else . + [{matcher: "Bash", hooks: [{type: "command", command: $cmd, timeout: $timeout,
+                                           statusMessage: "SkillSpector: verifying installed skill"}]}]
+      end);
 .permissions = (.permissions // {})
 | .permissions.deny = (((.permissions.deny // []) + $deny) | unique)
 | .hooks = (.hooks // {})
 | addhook("Bash"; $gbash)
 | addhook("Write|Edit|NotebookEdit"; $gwrite)
 | addgate($ggate; $gtimeout)
+| addpost($gpost; $gptimeout)
 '
 
 STRIP='
 def dropcmd($cmd):
   .hooks.PreToolUse |= (map(.hooks = ((.hooks // []) | map(select(.command != $cmd))))
                         | map(select((.hooks | length) > 0)));
+def droppost($cmd):
+  .hooks.PostToolUse |= (map(.hooks = ((.hooks // []) | map(select(.command != $cmd))))
+                         | map(select((.hooks | length) > 0)))
+  | if (.hooks.PostToolUse | length) == 0 then del(.hooks.PostToolUse) else . end;
 .permissions.deny = (((.permissions.deny // []) - $deny) )
 | if (.permissions.deny | length) == 0 then del(.permissions.deny) else . end
 | if (.hooks.PreToolUse | type) == "array"
   then dropcmd($gbash) | dropcmd($gwrite) | dropcmd($ggate) else . end
+| if (.hooks.PostToolUse | type) == "array" then droppost($gpost) else . end
 '
 
 case "$CMD" in
@@ -125,6 +147,7 @@ case "$CMD" in
     OUT=$(jq --slurpfile d "$DENY_FILE" \
              --arg gbash "$G_BASH" --arg gwrite "$G_WRITE" \
              --arg ggate "$G_GATE_CMD" --argjson gtimeout "$G_GATE_TIMEOUT" \
+             --arg gpost "$G_POST_CMD" --argjson gptimeout "$G_POST_TIMEOUT" \
              '$d[0].deny as $deny | '"$MERGE" "$SETTINGS")
     if [ "$DRY" -eq 1 ]; then
       printf 'mc-guard: dry-run, would write to %s:\n\n' "$SETTINGS"
@@ -145,6 +168,7 @@ case "$CMD" in
     cp "$SETTINGS" "$SETTINGS.mc-bak"
     jq --slurpfile d "$DENY_FILE" \
        --arg gbash "$G_BASH" --arg gwrite "$G_WRITE" --arg ggate "$G_GATE_CMD" \
+       --arg gpost "$G_POST_CMD" \
        '$d[0].deny as $deny | '"$STRIP" "$SETTINGS" > "$SETTINGS.mc-tmp"
     jq -e . "$SETTINGS.mc-tmp" >/dev/null || die "refusing to uninstall: output is not valid JSON"
     mv "$SETTINGS.mc-tmp" "$SETTINGS"
@@ -168,6 +192,10 @@ case "$CMD" in
          'any((.hooks.PreToolUse // [])[]; any((.hooks // [])[]; .command == $c and (.timeout // 0) >= $t))' \
          "$SETTINGS" >/dev/null; then ok "hook registered: $(basename "$G_GATE") (timeout >= ${G_GATE_TIMEOUT}s)"
     else fail "hook not registered with timeout >= ${G_GATE_TIMEOUT}s: $(basename "$G_GATE")"; rc=1; fi
+    if jq -e --arg c "$G_POST_CMD" \
+         'any((.hooks.PostToolUse // [])[]; any((.hooks // [])[]; .command == $c))' \
+         "$SETTINGS" >/dev/null; then ok "post-install hook registered: $(basename "$G_GATE") post"
+    else fail "post-install hook not registered: $(basename "$G_GATE") post (run: mc-guard.sh install)"; rc=1; fi
     n=$(jq '(.permissions.deny // []) | length' "$SETTINGS")
     want=$(jq '.deny | length' "$DENY_FILE")
     if [ "$n" -ge "$want" ]; then ok "permissions.deny has $n rules (>= $want expected)"
