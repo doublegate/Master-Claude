@@ -37,7 +37,9 @@ jobs:
       - name: SkillSpector gate tests
         # test/run.sh covers the shell guards only; without this step the Python gate's
         # suite would never run in CI. Stdlib only: SkillSpector itself is mocked.
-        run: python3 -m unittest test/test_skillspector_gate.py
+        # Discovery, not `-m unittest test/...`: on Pythons that ship the stdlib `test`
+        # package (e.g. Homebrew), the dotted name resolves to it and the import fails.
+        run: python3 -m unittest discover -s test -p 'test_skillspector_gate.py'
 
       - name: Self-check (repo invariants)
         # Self-host gate: symlinks resolve, AGENTS.md + every module/doc <=200 lines,

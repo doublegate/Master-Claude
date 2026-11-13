@@ -1,4 +1,9 @@
-"""Tests for guards/skillspector-gate.py. Run: python3 -m unittest test/test_skillspector_gate.py"""
+"""Tests for guards/skillspector-gate.py.
+
+Run: python3 -m unittest discover -s test -p 'test_skillspector_gate.py'
+(not `-m unittest test/...`: on Pythons that ship the stdlib `test` package the dotted
+name resolves to it and the import fails).
+"""
 
 import importlib.util
 import io
@@ -11,12 +16,15 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 GATE = ROOT / "guards" / "skillspector-gate.py"
 spec = importlib.util.spec_from_file_location("gate", GATE)
-gate = importlib.util.module_from_spec(spec)
+assert spec is not None and spec.loader is not None
+# Loaded from a file path (the name has a dash), so its attributes are dynamic: Any.
+gate: Any = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
 H = Path.home()
@@ -62,9 +70,68 @@ class Detect(unittest.TestCase):
         )
         self.assertEqual([g[1] for g in got], ["/w/a", "/w/b"])
 
-    def test_moving_an_installed_skill_is_not_reinstall(self):
+    def test_moving_an_installed_skill_is_scanned_too(self):
+        # PR #30 review: Write/Edit can change an installed skill after it passed, so a
+        # skills-dir location proves nothing about current content. Scanned (cached).
         got, _ = kinds("mv ~/.claude/skills/a ~/.codex/skills/")
-        self.assertEqual(got, [])
+        self.assertEqual(got, [("path", str(H / ".claude/skills/a"), None)])
+
+    # --- PR #30 review regressions -------------------------------------------------------
+
+    def test_attached_branch_forms_are_scanned_on_that_branch(self):
+        for c in (
+            "git clone --branch=evil https://github.com/o/r ~/.claude/skills/r",
+            "git clone -bevil https://github.com/o/r ~/.claude/skills/r",
+            "git clone -b evil https://github.com/o/r ~/.claude/skills/r",
+        ):
+            targets, _ = gate.detect(c, Path("/tmp"))
+            self.assertEqual([t.get("ref") for t in targets], ["evil"], c)
+
+    def test_attached_and_clustered_target_directory(self):
+        for c in (
+            'cp -r --target-directory="$HOME/.claude/skills" ./evil',
+            "cp -rt ~/.claude/skills ./evil",
+            "cp -r -t ~/.claude/skills ./evil",
+        ):
+            got, _ = kinds(c, Path("/w"))
+            self.assertEqual(got, [("path", "/w/evil", None)], c)
+
+    def test_rsync_t_and_S_take_no_value(self):
+        for c in (
+            "rsync -r -t ./demo ~/.claude/skills/",
+            "rsync -rtS ./demo ~/.claude/skills/",
+        ):
+            got, _ = kinds(c, Path("/w"))
+            self.assertEqual(got, [("path", "/w/demo", None)], c)
+        got, _ = kinds("rsync -a -e ssh ./demo ~/.claude/skills/", Path("/w"))
+        self.assertEqual(got, [("path", "/w/demo", None)])
+
+    def test_install_command_from_inside_a_skills_dir(self):
+        got, _ = kinds("install /tmp/SKILL.md demo/SKILL.md", H / ".claude/skills")
+        self.assertEqual(got, [("path", "/tmp/SKILL.md", None)])
+
+    def test_git_dash_C_does_not_move_the_shell(self):
+        got, _ = kinds(
+            "git -C /tmp/safe status && cp -r ./demo ~/.claude/skills/", Path("/w")
+        )
+        self.assertIn(("path", "/w/demo", None), got)
+        self.assertNotIn(("path", "/tmp/safe/demo", None), got)
+
+    def test_git_dash_C_still_places_the_clone(self):
+        got, _ = kinds(
+            "git -C ~/.claude/skills clone https://github.com/o/r", Path("/w")
+        )
+        self.assertEqual(got, [("git", "https://github.com/o/r", None)])
+
+    def test_local_spec_resolves_against_the_tracked_cwd(self):
+        got, _ = kinds("cd /other/repo && npx skills add ./skill", Path("/w"))
+        self.assertEqual(got, [("spec", "/other/repo/skill", None)])
+
+    def test_tar_attached_file_option(self):
+        got, _ = kinds("tar -x --file=evil.tgz -C ~/.claude/skills", Path("/w"))
+        self.assertEqual(got, [("path", "/w/evil.tgz", None)])
+        got, _ = kinds("tar -xf evil.tgz --directory=$HOME/.claude/skills", Path("/w"))
+        self.assertEqual(got, [("path", "/w/evil.tgz", None)])
 
     def test_parking_a_skill_is_not_install(self):
         got, _ = kinds("mv ~/.claude/skills/a ~/.claude/skills-disabled/")
@@ -245,7 +312,7 @@ class Hook(unittest.TestCase):
         self.env.stop()
         self.tmp.cleanup()
 
-    def run_hook(self, agent, verdict, command=None, mode=None):
+    def run_hook(self, agent, verdict, command=None, mode=None) -> tuple[Any, int]:
         stub, count = stub_scanner(self.tmp.name, verdict)
         os.environ["SKILLSPECTOR_GATE_SCANNER"] = str(stub)
         command = command or f"cp -r {self.src} ~/.claude/skills/"
@@ -288,6 +355,54 @@ class Hook(unittest.TestCase):
         reason = out["hookSpecificOutput"]["permissionDecisionReason"]
         self.assertIn("Exfiltrates ~/.ssh", reason)
         self.assertIn("skillspector-gate approve", reason)
+
+    def test_later_failure_does_not_weaken_an_earlier_deny(self):
+        # PR #30 review: a missing second source used to raise, and the hook replaced the
+        # DO_NOT_INSTALL with an 'ask', losing the findings.
+        command = f"cp -r {self.src} /nonexistent/demo2 ~/.claude/skills/"
+        out, _ = self.run_hook("claude", BAD, command=command)
+        self.assertEqual(self.decision(out), "deny")
+        self.assertIn(
+            "Exfiltrates ~/.ssh", out["hookSpecificOutput"]["permissionDecisionReason"]
+        )
+
+    def test_unscannable_target_still_lets_a_later_deny_win(self):
+        command = f"cp -r /nonexistent/demo2 {self.src} ~/.claude/skills/"
+        out, _ = self.run_hook("claude", BAD, command=command)
+        self.assertEqual(self.decision(out), "deny")
+
+    def test_oversized_archive_is_refused_before_extraction(self):
+        import zipfile
+
+        arc = Path(self.tmp.name) / "bomb.zip"
+        with zipfile.ZipFile(arc, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("demo/SKILL.md", "name: demo\n")
+            z.writestr("demo/big.bin", b"\0" * (2 * 2**20))
+        with mock.patch.object(gate, "MAX_ARCHIVE_BYTES", 2**20):
+            out, calls = self.run_hook(
+                "claude", SAFE, command=f"unzip {arc} -d ~/.claude/skills/"
+            )
+        self.assertEqual(self.decision(out), "ask")
+        self.assertIn(
+            "expands to", out["hookSpecificOutput"]["permissionDecisionReason"]
+        )
+        self.assertEqual(calls, 0)
+
+    def test_archive_member_count_limit(self):
+        import tarfile
+
+        arc = Path(self.tmp.name) / "many.tgz"
+        with tarfile.open(arc, "w:gz") as t:
+            for i in range(5):
+                data = io.BytesIO(b"x")
+                info = tarfile.TarInfo(f"demo/f{i}")
+                info.size = 1
+                t.addfile(info, data)
+        with (
+            mock.patch.object(gate, "MAX_ARCHIVE_MEMBERS", 3),
+            self.assertRaises(gate.GateError),
+        ):
+            gate.extract(arc, Path(self.tmp.name))
 
     def test_caution_asks_on_claude_but_denies_on_codex(self):
         self.assertEqual(self.decision(self.run_hook("claude", MEH)[0]), "ask")

@@ -17,9 +17,16 @@ Recognised installs (per shell sub-command, `cd` tracked across a chain):
 A skills dir is any path with a `skills` component below .claude/.codex/.agents/.gemini
 (and a few other agent homes). MCP servers installed from a package (uvx, npx) carry no
 skill bundle, so SkillSpector cannot scan them and this gate does not cover them.
+Options are read in every form the tools accept (`--branch=x`, `-bx`, `-rt DIR`), with
+per-tool option sets (rsync's -t/-S take no value). `git -C` moves only git, not the
+shell's tracked cwd. Local `skills add` paths resolve against that tracked cwd. Sources
+already in a skills dir are scanned too (an installed skill may have been edited since),
+and archives are refused before extraction when their declared size or member count
+exceeds the limits.
 
-Verdicts: safe_to_install -> pass. DO_NOT_INSTALL -> deny. Anything else (CAUTION,
-partial coverage, LLM pass missing, scan error) -> ask; Codex has no `ask`, so deny.
+Verdicts: safe_to_install -> pass. DO_NOT_INSTALL -> deny, and final: no later target or
+error weakens it. Anything else (CAUTION, partial coverage, LLM pass missing, a target
+that cannot be scanned) -> ask; Codex has no `ask`, so deny.
 Results are cached by content hash. `approve` records a content hash a human accepted;
 agent tool calls that try to approve, or touch the approvals file or the verdict cache, are
 denied, including a read command whose output is redirected. `ln` into a skills dir asks:
@@ -74,6 +81,10 @@ PER_SCAN_TIMEOUT = 600
 TOTAL_BUDGET = 840  # registered hook timeout is 900 s
 MAX_SKILLS = 8
 MAX_TREE_BYTES = 200 * 1024 * 1024
+# Checked BEFORE extraction (from the archive's own directory), so a small hostile archive
+# cannot fill the temp filesystem while the pre-install gate is still evaluating it.
+MAX_ARCHIVE_BYTES = MAX_TREE_BYTES
+MAX_ARCHIVE_MEMBERS = 10_000
 
 # Defaults matching ~/.config/fish/conf.d/skillspector.fish, for hosts that launch the
 # agent without that shell environment.
@@ -105,6 +116,7 @@ KEYWORDS = (
     "mv",
     "rsync",
     "ln",
+    "install",
     "unzip",
     "tar",
     "skills",
@@ -137,6 +149,62 @@ GIT_OPTS_WITH_VALUE = {
     "--upload-pack",
     "--server-option",
     "--bundle-uri",
+}
+# Options that take a value, per command family. cp/mv/install/ln share coreutils'
+# -t/--target-directory and -S/--suffix; rsync's -t (times) and -S (sparse) take none.
+COPY_OPTS_WITH_VALUE = {"-t", "--target-directory", "-S", "--suffix"}
+RSYNC_OPTS_WITH_VALUE = {
+    "-e",
+    "--rsh",
+    "-T",
+    "--temp-dir",
+    "-f",
+    "--filter",
+    "-B",
+    "--block-size",
+    "-M",
+    "--remote-option",
+    "--exclude",
+    "--include",
+    "--exclude-from",
+    "--include-from",
+    "--files-from",
+    "--partial-dir",
+    "--backup-dir",
+    "--suffix",
+    "--compare-dest",
+    "--copy-dest",
+    "--link-dest",
+    "--chmod",
+    "--chown",
+    "--log-file",
+    "--log-file-format",
+    "--out-format",
+    "--password-file",
+    "--port",
+    "--sockopts",
+    "--timeout",
+    "--contimeout",
+    "--bwlimit",
+    "--max-size",
+    "--min-size",
+    "--max-delete",
+    "--modify-window",
+    "--iconv",
+    "--rsync-path",
+    "--usermap",
+    "--groupmap",
+    "--compress-level",
+    "--compress-choice",
+    "--checksum-choice",
+    "--info",
+    "--debug",
+    "--stop-after",
+    "--stop-at",
+    "--write-batch",
+    "--only-write-batch",
+    "--read-batch",
+    "--protocol",
 }
 WRAPPERS = {
     "sudo",
@@ -253,6 +321,17 @@ def in_skills_dir(path: Path) -> bool:
     return False
 
 
+def _cluster_value(token: str, with_value: set[str]) -> tuple[str | None, bool]:
+    """For a short-option cluster such as -rt or -tDIR: (value-taking flag, value is the
+    next argument). The first value-taking letter ends the cluster; the rest of the token,
+    if any, is its value."""
+    letters = token[1:]
+    for k, ch in enumerate(letters):
+        if "-" + ch in with_value:
+            return "-" + ch, k == len(letters) - 1
+    return None, False
+
+
 def positionals(args: list[str], with_value: set[str]) -> list[str]:
     out, i = [], 0
     while i < len(args):
@@ -260,8 +339,12 @@ def positionals(args: list[str], with_value: set[str]) -> list[str]:
         if a == "--":
             out.extend(args[i + 1 :])
             break
-        if a.startswith("-") and a != "-":
-            if a in with_value:
+        if a.startswith("--"):
+            if a in with_value:  # `--flag value`; `--flag=value` carries its own value
+                i += 1
+        elif a.startswith("-") and a != "-":
+            flag, takes_next = _cluster_value(a, with_value)
+            if flag and takes_next:
                 i += 1
         else:
             out.append(a)
@@ -274,12 +357,28 @@ def repo_basename(url: str) -> str:
     return name.removesuffix(".git")
 
 
-def opt_value(args: list[str], flag: str) -> str | None:
-    """Value after `flag`, or None when the flag is absent or dangling at the end."""
-    if flag not in args:
-        return None
-    i = args.index(flag)
-    return args[i + 1] if i + 1 < len(args) else None
+def opt_value(
+    args: list[str], flags: tuple[str, ...], with_value: set[str] | None = None
+) -> str | None:
+    """Value of the first of `flags` present, in any of its forms: `--flag value`,
+    `--flag=value`, `-f value`, `-fVALUE` and a short cluster such as `-rf value`.
+    None when absent or dangling at the end."""
+    with_value = set(with_value or ()) | set(flags)
+    for i, a in enumerate(args):
+        if a == "--":
+            break
+        nxt = args[i + 1] if i + 1 < len(args) else None
+        if a in flags:
+            return nxt
+        if a.startswith("--"):
+            for f in flags:
+                if f.startswith("--") and a.startswith(f + "="):
+                    return a[len(f) + 1 :]
+        elif a.startswith("-") and len(a) > 2:
+            flag, takes_next = _cluster_value(a, with_value)
+            if flag in flags:
+                return nxt if takes_next else a[a.index(flag[1]) + 1 :]
+    return None
 
 
 def mentions_skills(text: str) -> bool:
@@ -356,10 +455,12 @@ def _detect_one(
     if cmd == "cd":
         return (expand(args[0], cwd) if args else HOME), None
     if cmd == "git":
-        rest = args
+        # `git -C dir` changes only this git process's directory; the shell's cwd, which
+        # later commands in the chain use, stays as it was.
+        rest, gcwd = args, cwd
         while rest and rest[0] in ("-C", "-c") and len(rest) > 1:
             if rest[0] == "-C":
-                cwd = expand(rest[1], cwd)
+                gcwd = expand(rest[1], gcwd)
             rest = rest[2:]
         if not rest or rest[0] != "clone":
             return cwd, None
@@ -367,18 +468,19 @@ def _detect_one(
         if not pos:
             return cwd, None
         url = pos[0]
-        dest = expand(pos[1], cwd) if len(pos) > 1 else cwd / repo_basename(url)
+        dest = expand(pos[1], gcwd) if len(pos) > 1 else gcwd / repo_basename(url)
         if near and len(pos) > 1 and opaque(pos[1], dest):
             targets.append({"kind": "unparsed", "source": joined})
             return cwd, None
         if in_skills_dir(dest):
-            ref = opt_value(rest, "-b") or opt_value(rest, "--branch")
+            ref = opt_value(rest[1:], ("-b", "--branch"), GIT_OPTS_WITH_VALUE)
             targets.append({"kind": "git", "source": url, "ref": ref})
     elif cmd in ("cp", "mv", "rsync", "ln", "install"):
-        pos = positionals(
-            args, {"-t", "--target-directory", "-e", "--rsh", "-S", "--suffix"}
-        )
-        tdir = opt_value(args, "-t") or opt_value(args, "--target-directory")
+        if cmd == "rsync":
+            pos, tdir = positionals(args, RSYNC_OPTS_WITH_VALUE), None
+        else:
+            pos = positionals(args, COPY_OPTS_WITH_VALUE)
+            tdir = opt_value(args, ("-t", "--target-directory"), COPY_OPTS_WITH_VALUE)
         if tdir:
             raw_dest, srcs = tdir, pos
         elif len(pos) >= 2:
@@ -395,16 +497,16 @@ def _detect_one(
         if in_skills_dir(dest):
             for s in srcs:
                 sp = expand(s.rstrip("/") if s != "/" else s, cwd)
-                if not in_skills_dir(
-                    sp
-                ):  # already-installed skills were gated on entry
-                    # A link keeps following its source, so whatever is scanned now can
-                    # be edited after it passes; no verdict can bind to what will run.
-                    kind = "link" if cmd == "ln" else "path"
-                    targets.append({"kind": kind, "source": str(sp)})
+                # Sources already inside a skills dir are scanned too: Write/Edit can change
+                # an installed skill after it passed, so its location proves nothing about
+                # its current content. The content-keyed cache keeps unchanged skills free.
+                # A link keeps following its source, so whatever is scanned now can be
+                # edited after it passes; no verdict can bind to what will run.
+                kind = "link" if cmd == "ln" else "path"
+                targets.append({"kind": kind, "source": str(sp)})
     elif cmd == "unzip":
         pos = positionals(args, {"-d", "-x", "-P"})
-        d = opt_value(args, "-d")
+        d = opt_value(args, ("-d",), {"-d", "-x", "-P"})
         dest = expand(d, cwd) if d else cwd
         if near and d and opaque(d, dest):
             targets.append({"kind": "unparsed", "source": joined})
@@ -417,14 +519,18 @@ def _detect_one(
         )
         if "x" not in flags and "--extract" not in args:
             return cwd, None
-        d = opt_value(args, "-C") or opt_value(args, "--directory")
+        d = opt_value(
+            args, ("-C", "--directory"), {"-C", "--directory", "-f", "--file"}
+        )
         dest = expand(d, cwd) if d else cwd
         if near and d and opaque(d, dest):
             targets.append({"kind": "unparsed", "source": joined})
             return cwd, None
         archive = None
         for i, a in enumerate(args):
-            if a in ("-f", "--file") or (
+            if a.startswith("--file="):
+                archive = a[len("--file=") :]
+            elif a in ("-f", "--file") or (
                 a.startswith("-") and not a.startswith("--") and a.endswith("f")
             ):
                 if i + 1 < len(args):
@@ -449,14 +555,31 @@ def _detect_one(
             and re.sub(r"@[^/]*$", "", pos[0]) in ("skills", "add-skill")
             and pos[1] in ("add", "install", "i")
         ):
-            skill = opt_value(rest, "--skill") or opt_value(rest, "-s")
-            targets.append({"kind": "spec", "source": pos[2], "skill": skill})
+            skill = opt_value(
+                rest,
+                ("--skill", "-s"),
+                {"--skill", "-s", "-a", "--agent", "-p", "--package"},
+            )
+            targets.append(
+                {"kind": "spec", "source": local_spec(pos[2], cwd), "skill": skill}
+            )
         elif len(pos) >= 2 and re.sub(r"@[^/]*$", "", pos[0]) == "add-skill":
-            targets.append({"kind": "spec", "source": pos[1], "skill": None})
+            targets.append(
+                {"kind": "spec", "source": local_spec(pos[1], cwd), "skill": None}
+            )
     return cwd, None
 
 
 # --- materialising and hashing targets ---------------------------------------------------
+
+
+def local_spec(spec: str, cwd: Path) -> str:
+    """A local skill spec (./x, ../x, /x, ~/x, or an existing relative path) as an absolute
+    path against the command's tracked cwd. materialise() runs in the hook's own cwd, so a
+    relative spec left as-is could scan a different directory than the one installed."""
+    if spec.startswith((".", "/", "~")) or expand(spec, cwd).exists():
+        return str(expand(spec, cwd))
+    return spec
 
 
 def github_url(spec: str) -> tuple[str, str | None, str | None]:
@@ -496,12 +619,26 @@ def clone(url: str, ref: str | None, into: Path) -> Path:
     return into / "repo"
 
 
+def check_archive_size(archive: Path, members: int, expanded: int) -> None:
+    if members > MAX_ARCHIVE_MEMBERS:
+        raise GateError(
+            f"archive has {members} members (limit {MAX_ARCHIVE_MEMBERS}): {archive}"
+        )
+    if expanded > MAX_ARCHIVE_BYTES:
+        raise GateError(
+            f"archive expands to {expanded // 2**20} MB (limit "
+            f"{MAX_ARCHIVE_BYTES // 2**20} MB): {archive}"
+        )
+
+
 def extract(archive: Path, into: Path) -> Path:
     out = into / "extracted"
     out.mkdir()
     if zipfile.is_zipfile(archive):
         with zipfile.ZipFile(archive) as z:
-            for info in z.infolist():
+            infos = z.infolist()
+            check_archive_size(archive, len(infos), sum(i.file_size for i in infos))
+            for info in infos:
                 target = (out / info.filename).resolve()
                 if not str(target).startswith(str(out.resolve())):
                     raise GateError(
@@ -510,7 +647,11 @@ def extract(archive: Path, into: Path) -> Path:
             z.extractall(out)
     elif tarfile.is_tarfile(archive):
         with tarfile.open(archive) as t:
-            t.extractall(out, filter="data")
+            members = t.getmembers()  # reads headers only; no file data is written
+            check_archive_size(
+                archive, len(members), sum(m.size for m in members if m.isfile())
+            )
+            t.extractall(out, members=members, filter="data")
     else:
         raise GateError(f"not a zip or tar archive: {archive}")
     return out
@@ -714,8 +855,15 @@ def evaluate(targets: list[dict], deadline: float) -> tuple[str, str]:
                 continue
             scratch = Path(tmp) / str(n)
             scratch.mkdir()
-            root = materialise(t, scratch)
-            skills = find_skills(root, t.get("skill"))
+            try:
+                root = materialise(t, scratch)
+                skills = find_skills(root, t.get("skill"))
+            except (GateError, OSError) as exc:
+                # One unreadable target must not discard what the others found: note it,
+                # ask, and keep scanning so a later DO_NOT_INSTALL still denies.
+                worst = max_dec(worst, "ask")
+                notes.append(f"{t['source']}: could not be scanned: {exc}")
+                continue
             if not skills:
                 worst = max_dec(worst, "ask")
                 notes.append(
@@ -754,6 +902,10 @@ def evaluate(targets: list[dict], deadline: float) -> tuple[str, str]:
                 dec = "deny" if v.get("recommendation") == "DO_NOT_INSTALL" else "ask"
                 worst = max_dec(worst, dec)
                 notes.append(summarise(label, v))
+                if worst == "deny":
+                    # Final: nothing scanned later can lift a deny, and a later error or
+                    # timeout must not replace it with an ask.
+                    return worst, "\n".join(notes)
     return worst, "\n".join(notes)
 
 
@@ -971,7 +1123,7 @@ def check(target: str, skill: str | None) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        prog="skillspector-gate", description=__doc__.split("\n\n")[0]
+        prog="skillspector-gate", description=(__doc__ or "").split("\n\n")[0]
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
     h = sub.add_parser("hook")
