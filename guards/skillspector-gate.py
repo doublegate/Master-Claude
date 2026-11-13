@@ -1118,6 +1118,24 @@ def _entries(value) -> list[dict]:
     )
 
 
+def stat_signature(path: Path) -> str | None:
+    """Cheap fingerprint of a directory (every entry's path, size and mtime), with no size
+    limit: tells whether an install changed a destination that existed before it. None
+    when the path does not exist."""
+    if not path.exists():
+        return None
+    h = hashlib.sha256()
+    try:
+        entries = [path, *sorted(path.rglob("*"))] if path.is_dir() else [path]
+        for e in entries:
+            st = e.lstat()
+            rel = "." if e == path else e.relative_to(path).as_posix()
+            h.update(f"{rel}\0{st.st_size}\0{st.st_mtime_ns}\0".encode())
+    except OSError:
+        return "unreadable"
+    return h.hexdigest()
+
+
 @contextlib.contextmanager
 def pending_lock():
     """Serialise read-modify-write of the pending file across concurrent hook processes;
@@ -1157,10 +1175,18 @@ def record_pending(command: str, cwd: Path, bindings: list[dict]) -> None:
             for d in sd.iterdir()
             if d.is_dir()
         )
+        # A git clone into an existing non-empty dir fails and installs nothing; remember
+        # each destination's state so a failed clone never quarantines what was there.
+        dests = {
+            b["dest"]: stat_signature(Path(b["dest"]))
+            for b in bindings
+            if b["kind"] == "git" and b.get("dest")
+        }
         entry = {
             "at": now,
             "cwd": str(cwd),
             "before": before,
+            "dest_before": {d: sig for d, sig in dests.items() if sig is not None},
             "session": LAST_IDS.get("session", ""),
             "call": LAST_IDS.get("call", ""),
             "items": bindings,
@@ -1292,6 +1318,7 @@ def post(agent: str) -> int:
     since = entry.get("at", 0)
     base = Path(entry.get("cwd") or cwd)
     before = set(entry["before"]) if isinstance(entry.get("before"), list) else None
+    dest_before = entry.get("dest_before") or {}
     bad, unverified, sources = [], [], []
 
     def reject(label: str, root: Path, why: str) -> None:
@@ -1306,6 +1333,7 @@ def post(agent: str) -> int:
     # settled here; a clone too large to hash whole keeps its per-skill checks below.
     seen: set[str] = set()
     done: set[str] = set()
+    unchanged: list[str] = []
     for item in entry.get("items", []):
         dest = item.get("dest")
         if item["kind"] != "git" or not dest or dest in seen:
@@ -1314,6 +1342,12 @@ def post(agent: str) -> int:
         root = Path(dest)
         if not root.exists():
             continue  # reported unverified by the per-skill loop
+        if dest in dest_before and stat_signature(root) == dest_before[dest]:
+            # Existed before and untouched: the clone failed (or never ran), so nothing
+            # was installed here and nothing of the user's is moved.
+            done.add(dest)
+            unchanged.append(item["source"])
+            continue
         if item.get("root_digest"):
             try:
                 same = tree_hash(root) == item["root_digest"]
@@ -1389,6 +1423,9 @@ def post(agent: str) -> int:
     sources += sorted(
         {i["source"] for i in entry.get("items", []) if i["kind"] == "git"}
     )
+    sources = [x for x in sources if x not in unchanged]
+    if unchanged:
+        audit(agent, mode, "not-installed", unchanged)
     if bad:
         audit(agent, mode, "quarantined", sources)
         reason = (
@@ -1422,7 +1459,8 @@ def post(agent: str) -> int:
             file=sys.stderr,
         )
         return 0
-    audit(agent, mode, "verified", sources)
+    if sources:
+        audit(agent, mode, "verified", sources)
     return 0
 
 
