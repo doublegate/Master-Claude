@@ -70,6 +70,11 @@ import time
 import zipfile
 from pathlib import Path
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover -- non-POSIX: no interprocess lock available
+    fcntl = None
+
 HOME = Path.home()
 STATE_DIR = Path(
     os.environ.get("SKILLSPECTOR_GATE_STATE", HOME / ".config" / "skillspector")
@@ -761,9 +766,16 @@ def load_json(path: Path) -> dict:
 
 def save_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
-    tmp.replace(path)
+    # A unique temp name per writer: a fixed one made two concurrent saves race on it.
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.stem}-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(data, indent=1, sort_keys=True))
+        os.replace(name, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(name)
+        raise
 
 
 def config_key() -> str:
@@ -1106,64 +1118,85 @@ def _entries(value) -> list[dict]:
     )
 
 
+@contextlib.contextmanager
+def pending_lock():
+    """Serialise read-modify-write of the pending file across concurrent hook processes;
+    the atomic replace in save_json alone would still lose one of two overlapping updates."""
+    PENDING_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(PENDING_FILE.with_suffix(".lock"), "a", encoding="utf-8") as fh:
+        if fcntl is not None:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if fcntl is not None:
+                fcntl.flock(fh, fcntl.LOCK_UN)
+
+
 def record_pending(command: str, cwd: Path, bindings: list[dict]) -> None:
     """Remember what was scanned for this exact command, for the post-install check.
     Entries are a list per command and carry the invocation identity, so the same command
     run concurrently in two sessions or workspaces keeps two independent checks."""
     if not bindings:
         return
-    pending = load_json(PENDING_FILE)
-    now = time.time()
-    pending = {
-        k: kept
-        for k, v in pending.items()
-        if (kept := [e for e in _entries(v) if now - e.get("at", 0) < PENDING_TTL])
-    }
-    # Snapshot what already exists in the skills dirs a `skills add` may write to, so the
-    # post check can tell this install's additions from skills that were already there.
-    where = {b.get("cwd") or str(cwd) for b in bindings if b["kind"] != "git"}
-    before = sorted(
-        str(d)
-        for w in where
-        for sd in skills_dirs(Path(w))
-        for d in sd.iterdir()
-        if d.is_dir()
-    )
-    entry = {
-        "at": now,
-        "cwd": str(cwd),
-        "before": before,
-        "session": LAST_IDS.get("session", ""),
-        "call": LAST_IDS.get("call", ""),
-        "items": bindings,
-    }
-    pending.setdefault(command_key(command), []).append(entry)
-    save_json(PENDING_FILE, pending)
+    with pending_lock():
+        pending = load_json(PENDING_FILE)
+        now = time.time()
+        pending = {
+            k: kept
+            for k, v in pending.items()
+            if (kept := [e for e in _entries(v) if now - e.get("at", 0) < PENDING_TTL])
+        }
+        # Snapshot what already exists in the skills dirs a `skills add` may write to, so the
+        # post check can tell this install's additions from skills that were already there.
+        where = {b.get("cwd") or str(cwd) for b in bindings if b["kind"] != "git"}
+        before = sorted(
+            str(d)
+            for w in where
+            for sd in skills_dirs(Path(w))
+            for d in sd.iterdir()
+            if d.is_dir()
+        )
+        entry = {
+            "at": now,
+            "cwd": str(cwd),
+            "before": before,
+            "session": LAST_IDS.get("session", ""),
+            "call": LAST_IDS.get("call", ""),
+            "items": bindings,
+        }
+        pending.setdefault(command_key(command), []).append(entry)
+        save_json(PENDING_FILE, pending)
 
 
 def take_pending(command: str, cwd: Path) -> dict | None:
     """Remove and return the pre-install record that belongs to this invocation: same tool
     call id, else same session and cwd, else same cwd, else the oldest."""
-    pending = load_json(PENDING_FILE)
-    key = command_key(command)
-    entries = _entries(pending.get(key))
-    if not entries:
-        return None
-    sid, call, where = LAST_IDS.get("session", ""), LAST_IDS.get("call", ""), str(cwd)
-    rules = (
-        lambda e: bool(call) and e.get("call") == call,
-        lambda e: bool(sid) and e.get("session") == sid and e.get("cwd") == where,
-        lambda e: e.get("cwd") == where,
-        lambda e: True,
-    )
-    chosen = next((e for rule in rules for e in entries if rule(e)), entries[0])
-    entries.remove(chosen)
-    if entries:
-        pending[key] = entries
-    else:
-        pending.pop(key, None)
-    save_json(PENDING_FILE, pending)
-    return chosen
+    with pending_lock():
+        pending = load_json(PENDING_FILE)
+        key = command_key(command)
+        entries = _entries(pending.get(key))
+        if not entries:
+            return None
+        sid, call, where = (
+            LAST_IDS.get("session", ""),
+            LAST_IDS.get("call", ""),
+            str(cwd),
+        )
+        rules = (
+            lambda e: bool(call) and e.get("call") == call,
+            lambda e: bool(sid) and e.get("session") == sid and e.get("cwd") == where,
+            lambda e: e.get("cwd") == where,
+            lambda e: True,
+        )
+        chosen = next((e for rule in rules for e in entries if rule(e)), entries[0])
+        entries.remove(chosen)
+        if entries:
+            pending[key] = entries
+        else:
+            pending.pop(key, None)
+        save_json(PENDING_FILE, pending)
+        return chosen
 
 
 def skills_dirs(cwd: Path) -> list[Path]:
@@ -1202,13 +1235,32 @@ def locate(
 
 
 def quarantine(path: Path) -> Path:
+    """Move an installed skill into quarantine and return where it went.
+
+    A symlinked skill (e.g. `.claude/skills/x` -> `.agents/skills/x`, the layout `skills
+    add` uses) is resolved: the content it points at is moved, then the link is removed,
+    so the real skill is never left behind. A link into a place that is not a skills dir is
+    removed (the skill is no longer installed) and reported, since that content was not
+    installed by this command and is not ours to move."""
+    target = path
+    if path.is_symlink():
+        real = path.resolve()
+        if not in_skills_dir(real):
+            path.unlink()
+            raise OSError(
+                f"it linked to {real}, outside any skills dir; the link was removed, "
+                f"review {real} by hand"
+            )
+        target = real
     QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
-    dest = QUARANTINE_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}-{path.name}"
+    dest = QUARANTINE_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}-{target.name}"
     n = 1
     while dest.exists():
         n += 1
         dest = dest.with_name(f"{dest.name}-{n}")
-    shutil.move(str(path), str(dest))
+    shutil.move(str(target), str(dest))
+    if path.is_symlink():
+        path.unlink()
     return dest
 
 
@@ -1233,9 +1285,7 @@ def post(agent: str) -> int:
             moved = quarantine(root)
             bad.append(f"{label}: {why}; moved to {moved}")
         except OSError as exc:
-            bad.append(
-                f"{label}: {why} and could not be quarantined ({exc}); remove {root} by hand"
-            )
+            bad.append(f"{label}: {why} and could not be quarantined: {exc}")
 
     # git clones: the whole installed tree must equal the scanned tree, so an added skill or
     # any changed file fails, not only a changed scanned skill. `done` holds the clones

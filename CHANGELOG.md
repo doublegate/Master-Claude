@@ -19,7 +19,10 @@ All notable changes to this project are documented here. The format is based on
     and cwd, so the same command run concurrently in two sessions or workspaces keeps two
     independent checks; the post hook takes the record for its own tool call (falling back to
     session + cwd, then cwd). Each target also keeps its effective cwd, so
-    `cd /project && npx skills add …` is checked in `/project`'s skills dirs.
+    `cd /project && npx skills add …` is checked in `/project`'s skills dirs. Reads and
+    writes of the pending file are serialised with an interprocess `flock`, so overlapping
+    hooks never drop each other's records, and every JSON state save (pending, verdicts,
+    approvals) now writes through a unique temp file instead of one shared `.tmp` name.
   - The new `skillspector-gate.py post --agent …` (`PostToolUse`) hashes what was actually
     installed. A `git clone` must match the whole scanned tree (minus `.git`), so a second
     fetch that adds a skill or changes any helper file fails, not only a changed scanned skill.
@@ -27,19 +30,22 @@ All notable changes to this project are documented here. The format is based on
     digest. A `skills add` skill is found by name in the agent skills dirs; the pre-install
     hook snapshots those dirs, and any other skill dir that is new since the snapshot, was not
     scanned and is not expected by another pending gated install is quarantined too.
-  - On a mismatch the install is moved to `~/.cache/skillspector-gate/quarantine/` and Claude
+  - On a mismatch the install is moved to `~/.cache/skillspector-gate/quarantine/` (a
+    symlinked skill is resolved: its real content in a skills dir is moved and the link
+    removed; a link pointing outside the skills dirs is removed and reported) and Claude
     gets `decision: block` with the reason. If the skill cannot be found it is reported as
     unverified, never as a match.
   - Every outcome is written to the audit log.
   - `bin/mc-guard.sh` registers the post hook (`PostToolUse`, Bash, 120 s) on `install`,
     verifies it, and removes only that entry on `uninstall`, keeping foreign `PostToolUse`
     hooks.
-  - Tests: 20 new gate tests: match verified; git and `skills add` mismatches quarantined;
+  - Tests: 23 new gate tests: match verified; git and `skills add` mismatches quarantined;
     a clone with an added skill or a changed helper file quarantined; an unscanned extra skill
     from `skills add` quarantined while the scanned one and older skills stay; concurrent and
     id-less records paired correctly; legacy pending files read; an oversized clone keeps
     per-skill checks; recently touched existing skills and another pending install's skill are
-    left alone; `cd … && skills add` checked in the target project; missing install unverified;
+    left alone; `cd … && skills add` checked in the target project; symlinked skills
+    quarantine their real content; overlapping pre-hooks keep every record; missing install unverified;
     denied and local installs record nothing; unrelated commands ignored; the pending file is
     protected. They also redirect `PENDING_FILE` and
     `QUARANTINE_DIR`, so no test touches the real cache. Guard tests cover registration,
